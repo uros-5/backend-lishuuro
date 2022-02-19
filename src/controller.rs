@@ -5,29 +5,19 @@ use actix_web::{http, web, HttpRequest, HttpResponse, Responder};
 use bson::doc;
 use querystring::querify;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::json;
 
 use crate::{
-    login_lichess::*,
+    lichess::login::*,
     models::model::{AppState, User},
     models::redis_session::*,
 };
+
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct Info {
     counter: u8,
 }
-
-pub async fn incr<'a>(app_data: web::Data<Mutex<AppState>>) -> impl Responder {
-    let mut app_data = app_data.lock().unwrap();
-    app_data.update_counter();
-    web::Json(Info {
-        counter: app_data.counter,
-    })
-}
-
-//pub async fn create_anon(app_state: web::Data<AppState>, session: Session) -> impl Responder {}
-
 
 pub async fn login(_: HttpRequest, session: Session) -> impl Responder {
     let (lichess_url, verifier) = login_url();
@@ -81,9 +71,8 @@ pub async fn callback<'a>(
 }
 
 pub async fn vue_user(
-    req: HttpRequest,
-    session: Session
+    _session: Session
 ) -> impl Responder {
-    let (logged, username) = is_logged(&session).await;
+    let (logged, username) = is_logged(&_session).await;
     web::Json( json!( { "logged": logged, "username": username } ))
 }

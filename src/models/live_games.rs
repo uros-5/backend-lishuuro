@@ -1,4 +1,6 @@
 use crate::models::model::ShuuroGame;
+
+#[derive(Clone)]
 pub struct LiveGames {
     pub shuuro_games: Vec<ShuuroLive>,
 }
@@ -11,6 +13,7 @@ impl Default for LiveGames {
     }
 }
 
+#[derive(Clone)]
 pub struct ShuuroLive {
     id: String,
     game: ShuuroGame,

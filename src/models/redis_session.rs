@@ -1,5 +1,5 @@
 use actix_session::Session;
-use crate::{login_lichess::{create_verifier, random_username}, models::model::{AppState, User}};
+use crate::{lichess::login::{create_verifier, random_username}, models::model::{AppState, User}};
 use actix_web::web;
 use std::sync::Mutex;
 
@@ -48,25 +48,10 @@ pub async fn is_logged(session: &Session) -> (bool, String) {
     }
 }
 
-pub async fn is_reg(session: &Session) -> bool {
-    let result = session.get::<bool>("reg");
-    match result {
-        Ok(i) => match i {
-            Some(s) => {
-                return s;
-            }
-            None => {
-                return false;
-            }
-        },
-        Err(_) => return false,
-    }
-}
-
 pub async fn new_user(session: &Session, app_data: web::Data<Mutex<AppState>>) -> (String, bool) {
-    let mut app_data = app_data.lock().unwrap();
+    let app_data = app_data.lock().unwrap();
     let username = random_username();
-    let mut anon = User::new(username.clone());
+    let anon = User::new(username.clone());
     let verifier = create_verifier();
     set_session(&session, verifier).await;
     set_username(&session, &anon.username).await;

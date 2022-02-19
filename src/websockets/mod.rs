@@ -46,7 +46,7 @@ impl Actor for WsConn {
             .wait(ctx);
     }
 
-    fn stopping(&mut self, ctx: &mut Self::Context) -> Running {
+    fn stopping(&mut self, _: &mut Self::Context) -> Running {
         let active_player = ActivePlayer::new(&self.logged, &self.username);
         self.lobby.do_send(Disconnect {
             player: active_player,
@@ -66,6 +66,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsConn {
                 self.hb = Instant::now();
             }
             Ok(ws::Message::Text(text)) => {
+                println!("here");
                 let msg = RegularMessage::new(text, &self.username, &self.logged);
                 self.lobby.do_send(msg)
             }
@@ -110,6 +111,7 @@ impl WsConn {
 impl Handler<WsMessage> for WsConn {
     type Result = ();
     fn handle(&mut self, msg: WsMessage, ctx: &mut Self::Context) {
+        println!("{:?}", &msg.0);
         ctx.text(msg.0);
     }
 }

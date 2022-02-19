@@ -35,16 +35,6 @@ pub struct Token {
     pub expires_in: i32,
 }
 
-impl Token {
-    /*pub fn new(token_type: String, access_token: String, expires_in: i32) -> Self {
-        Token {
-            token_type,
-            access_token,
-            expires_in,
-        }
-    }*/
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LoginData {
     id: String,

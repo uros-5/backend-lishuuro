@@ -7,7 +7,7 @@ use sha2::digest::generic_array::typenum::U32;
 use sha2::{digest::generic_array::GenericArray, Digest, Sha256};
 use url::Url;
 
-use crate::models::lichess_model::{LoginData, PostLoginToken, Token};
+use crate::lichess::model::{LoginData, PostLoginToken, Token};
 
 const LOGIN_STATE: &str = "_aXV20V_";
 
@@ -68,7 +68,6 @@ pub async fn get_lichess_token(session: &Session, code: &str) -> Token {
     let res = client.post(url).send_json(&body.to_json()).await;
     match res {
         Ok(mut i) => {
-            let status_code = i.status();
             let json = i.json::<Token>().await;
             match json {
                 Ok(tok) => {
@@ -96,7 +95,6 @@ pub async fn get_lichess_user(token: String) -> String {
         .await;
     match res {
         Ok(mut i) => {
-            let status_code = i.status();
             let json = i.json::<LoginData>().await;
             match json {
                 Ok(data) => {

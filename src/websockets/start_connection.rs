@@ -5,8 +5,8 @@ use actix_session::Session;
 use actix_web::{get, web, web::Data, web::Payload, Error, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use std::sync::Mutex;
-use crate::login_lichess::random_username;
-use crate::login_lichess::create_verifier;
+use crate::lichess::login::random_username;
+use crate::lichess::login::create_verifier;
 #[get("/ws/")]
 pub async fn start_connection(
     req: HttpRequest,
@@ -15,7 +15,7 @@ pub async fn start_connection(
     session: Session,
     app_data: web::Data<Mutex<AppState>>
 ) -> Result<HttpResponse, Error> {
-    let (mut logged, mut username) = is_logged(&session).await; let app_data = app_data.lock().unwrap();
+    let (logged, mut username) = is_logged(&session).await; let app_data = app_data.lock().unwrap();
     // username == '' create add to session add to mongo
     if username == "" {
         username = random_username();

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use time::{Duration, OffsetDateTime};
 
-pub const VARIANTS: [&str; 1] = ["shuuro"];
+pub const VARIANTS: [&str; 1] = ["shuuro12"];
 pub const DURATION_RANGE: [i64; 28] = [
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 25, 30, 35, 40, 45, 60,
     75, 90,
@@ -62,21 +62,67 @@ pub struct ShuuroStage {
     pub fen: Vec<String>,
 }
 
+impl Default for ShuuroStage {
+    fn default() -> Self {
+        ShuuroStage {
+            stm: String::default(),
+            white_hand: String::default(),
+            black_hand: String::default(),
+            fen: vec![],
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ShuuroGame {
-    pub match_length: Duration,
+    pub time: Duration,
     pub incr: Duration,
     pub white: String,
     pub black: String,
     pub stm: String,
     pub white_clock: Duration,
     pub black_clock: Duration,
-    pub last_clock: Duration,
+    pub last_clock: OffsetDateTime,
     pub current_stage: String,
     pub result: String,
     pub shop: ShuuroStage,
     pub put: ShuuroStage,
     pub play: ShuuroStage,
+}
+
+impl Default for ShuuroGame {
+    fn default() -> Self {
+        Self {
+            time: Duration::default(),
+            incr: Duration::default(),
+            white: String::from(""),
+            black: String::from(""),
+            stm: String::from("white"),
+            white_clock: Duration::default(),
+            black_clock: Duration::default(),
+            last_clock: OffsetDateTime::now_utc(),
+            current_stage: String::from("shop"),
+            result: String::from(""),
+            shop: ShuuroStage::default(),
+            put: ShuuroStage::default(),
+            play: ShuuroStage::default(),
+        }
+    }
+}
+
+impl ShuuroGame {
+    fn new(time: i64, incr: i64) -> Self {
+        let mut game = ShuuroGame::default();
+        game.time = Duration::new(time * 60, 0);
+        game.incr = Duration::new(incr, 0);
+        game
+    }
+}
+
+impl From<&LobbyGame> for ShuuroGame {
+    fn from(game: &LobbyGame) -> Self {
+        ShuuroGame::new(game.time, game.incr)
+    }
 }
 
 // WebSockets
@@ -103,15 +149,14 @@ impl ChatItem {
         let now = OffsetDateTime::now_utc();
         self.user = user.clone();
         self.time = format!("{}:{}", now.hour(), now.minute());
-     }
-    
+    }
+
     pub fn response(&mut self) -> Value {
         let mut first = serde_json::json!(&mut self.clone());
         let second = json!({ "t": "home_chat_message" });
         first.merge(second);
         first
     }
-    
 }
 
 #[derive(Serialize, Deserialize, Hash, Eq, PartialEq, Clone)]
@@ -130,7 +175,9 @@ impl ActivePlayer {
     pub fn username(&self) -> String {
         self.username.clone()
     }
-    pub fn reg(&self) -> bool { self.reg.clone() }
+    pub fn reg(&self) -> bool {
+        self.reg.clone()
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -145,8 +192,7 @@ pub struct LobbyGame {
 impl LobbyGame {
     pub fn is_valid(&self) -> bool {
         if VARIANTS.contains(&&self.variant[..]) {
-            if DURATION_RANGE.contains(&self.time)
-            {
+            if DURATION_RANGE.contains(&self.time) {
                 if DURATION_RANGE.contains(&self.incr) {
                     return true;
                 }
@@ -162,7 +208,9 @@ impl LobbyGame {
         first
     }
 
-    pub fn username(&self) -> String { self.username.clone() }
+    pub fn username(&self) -> String {
+        self.username.clone()
+    }
 }
 
 impl PartialEq for LobbyGame {
@@ -174,6 +222,7 @@ impl PartialEq for LobbyGame {
     }
 }
 
+#[derive(Clone)]
 pub struct LobbyGames {
     all: Vec<LobbyGame>,
     duration_range: Vec<u8>,
@@ -223,8 +272,15 @@ impl LobbyGames {
                 self.all.remove(i);
                 return i as i32;
             }
-            None => -10
+            None => -10,
         }
+    }
+
+    pub fn delete_by_user(&mut self, user: &ActivePlayer) {
+        self.all.retain(|item| &item.username() != &user.username());
+        /*for game in self.all.iter() {
+
+        }*/
     }
 
     pub fn response(&self) -> Value {
