@@ -1,7 +1,9 @@
 use json_value_merge::Merge;
 use mongodb::Collection;
+use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use shuuro::{Color, Position, Shop};
 use time::{Duration, OffsetDateTime};
 
 pub const VARIANTS: [&str; 1] = ["shuuro12"];
@@ -54,28 +56,9 @@ impl User {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ShuuroStage {
-    pub stm: String,
-    pub white_hand: String,
-    pub black_hand: String,
-    pub fen: Vec<String>,
-}
-
-impl Default for ShuuroStage {
-    fn default() -> Self {
-        ShuuroStage {
-            stm: String::default(),
-            white_hand: String::default(),
-            black_hand: String::default(),
-            fen: vec![],
-        }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShuuroGame {
-    pub time: Duration,
+    pub min: Duration,
     pub incr: Duration,
     pub white: String,
     pub black: String,
@@ -85,27 +68,31 @@ pub struct ShuuroGame {
     pub last_clock: OffsetDateTime,
     pub current_stage: String,
     pub result: String,
-    pub shop: ShuuroStage,
-    pub put: ShuuroStage,
-    pub play: ShuuroStage,
+    pub shop_history: Vec<String>,
+    pub deploy_history: Vec<String>,
+    pub fight_history: Vec<String>,
+    pub white_credit: u16,
+    pub black_credit: u16,
 }
 
 impl Default for ShuuroGame {
     fn default() -> Self {
         Self {
-            time: Duration::default(),
+            min: Duration::default(),
             incr: Duration::default(),
             white: String::from(""),
             black: String::from(""),
-            stm: String::from("white"),
+            stm: String::from(""),
             white_clock: Duration::default(),
             black_clock: Duration::default(),
             last_clock: OffsetDateTime::now_utc(),
             current_stage: String::from("shop"),
             result: String::from(""),
-            shop: ShuuroStage::default(),
-            put: ShuuroStage::default(),
-            play: ShuuroStage::default(),
+            shop_history: Vec::new(),
+            deploy_history: Vec::new(),
+            fight_history: Vec::new(),
+            white_credit: 800,
+            black_credit: 800,
         }
     }
 }
@@ -113,7 +100,7 @@ impl Default for ShuuroGame {
 impl ShuuroGame {
     fn new(time: i64, incr: i64) -> Self {
         let mut game = ShuuroGame::default();
-        game.time = Duration::new(time * 60, 0);
+        game.min = Duration::new(time * 60, 0);
         game.incr = Duration::new(incr, 0);
         game
     }
@@ -195,6 +182,8 @@ impl LobbyGame {
             if DURATION_RANGE.contains(&self.time) {
                 if DURATION_RANGE.contains(&self.incr) {
                     return true;
+                } else if &self.incr == &0 {
+                    return true;
                 }
             }
         }
@@ -205,12 +194,35 @@ impl LobbyGame {
         let mut first = serde_json::json!(&mut self.clone());
         let second = json!({ "t": t });
         first.merge(second);
+        
         first
     }
 
     pub fn username(&self) -> String {
         self.username.clone()
     }
+
+    pub fn colors(&mut self, accepting_player: &String) -> [String; 2] {
+        let mut c_s: [String; 2] = [String::from(""), String::from("")];
+        let mut temp_color = self.color.clone();
+        if temp_color == String::from("random") {
+            if rand::random() {
+                temp_color = String::from("white");
+            } else {
+                temp_color = String::from("black");
+            }
+        }
+        if temp_color == String::from("white") {
+            c_s = [self.username(), accepting_player.clone()];
+        }
+        // this is black
+        else {
+            c_s = [accepting_player.clone(), self.username()];
+        }
+        c_s
+    }
+    
+    pub fn color(&self) -> &String { &self.color }
 }
 
 impl PartialEq for LobbyGame {
@@ -291,34 +303,36 @@ impl LobbyGames {
 #[derive(Serialize, Deserialize)]
 pub struct TimeControl {
     last_click: OffsetDateTime,
-    inc: u8,
+    inc: Duration,
     black_player: Duration,
     white_player: Duration,
+    stage: String,
 }
 
 impl TimeControl {
-    fn new(inc: u8, duration: i64) -> Self {
+    fn new(inc: u32, duration: u32) -> Self {
         TimeControl {
             last_click: OffsetDateTime::now_utc(),
-            inc,
-            black_player: Duration::new(duration, 0),
-            white_player: Duration::new(duration, 0),
+            inc: Duration::new(inc as i64, 0),
+            black_player: Duration::new(duration as i64, 0),
+            white_player: Duration::new(duration as i64, 0),
+            stage: String::from("shop"),
         }
     }
 
-    fn click(&mut self, c: char) -> bool {
+    pub fn click(&mut self, c: char) -> bool {
         let now = OffsetDateTime::now_utc();
         let elapsed = now - self.last_click;
         if c == 'w' {
-            self.white_player -= elapsed;
+            self.white_player -= elapsed + self.inc;
         } else if c == 'b' {
-            self.black_player -= elapsed;
+            self.black_player -= elapsed + self.inc;
         }
         self.last_click = now;
         self.time_ok(c)
     }
 
-    fn time_ok(&self, c: char) -> bool {
+    pub fn time_ok(&self, c: char) -> bool {
         if c == 'w' {
             return self.white_player.whole_seconds() <= 0
                 && self.white_player.whole_nanoseconds() <= 0;
@@ -327,5 +341,13 @@ impl TimeControl {
                 && self.white_player.whole_nanoseconds() <= 0;
         }
         false
+    }
+
+    pub fn set_clock(&mut self, c: char, d: Duration) {
+        if c == 'w' {
+            self.white_player = d;
+        } else if c == 'b' {
+            self.black_player = d;
+        }
     }
 }

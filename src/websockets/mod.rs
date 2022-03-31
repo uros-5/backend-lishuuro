@@ -66,7 +66,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsConn {
                 self.hb = Instant::now();
             }
             Ok(ws::Message::Text(text)) => {
-                println!("here");
                 let msg = RegularMessage::new(text, &self.username, &self.logged);
                 self.lobby.do_send(msg)
             }
@@ -94,7 +93,6 @@ impl WsConn {
             // check client heartbeats
             if Instant::now().duration_since(act.hb) > CLIENT_TIMEOUT {
                 // heartbeat timed out
-                println!("Websocket Client heartbeat failed, disconnecting!");
 
                 // stop actor
                 ctx.stop();
@@ -111,7 +109,6 @@ impl WsConn {
 impl Handler<WsMessage> for WsConn {
     type Result = ();
     fn handle(&mut self, msg: WsMessage, ctx: &mut Self::Context) {
-        println!("{:?}", &msg.0);
         ctx.text(msg.0);
     }
 }

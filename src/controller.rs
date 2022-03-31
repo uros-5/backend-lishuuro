@@ -1,8 +1,9 @@
-use std::sync::Mutex;
+use std::{sync::Mutex, time::Duration};
 
 use actix_session::Session;
 use actix_web::{http, web, HttpRequest, HttpResponse, Responder};
 use bson::doc;
+use itertools::Itertools;
 use querystring::querify;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -12,7 +13,6 @@ use crate::{
     models::model::{AppState, User},
     models::redis_session::*,
 };
-
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct Info {
@@ -53,11 +53,12 @@ pub async fn callback<'a>(
                                 let new_user = User::new(lichess_user);
                                 app_data.users.insert_one(new_user, None).await;
                             }
-                            _ => (),
+                            _ => {
+                                set_username(&session, &lichess_user).await;
+                                set_reg(&session, &true).await;
+                            }
                         },
-                        Err(err) => {
-                            println!("{:}", err);
-                        }
+                        Err(err) => {}
                     }
                 }
             }
@@ -70,9 +71,11 @@ pub async fn callback<'a>(
         .into_body()
 }
 
-pub async fn vue_user(
-    _session: Session
-) -> impl Responder {
+pub async fn vue_user(_session: Session) -> impl Responder {
     let (logged, username) = is_logged(&_session).await;
-    web::Json( json!( { "logged": logged, "username": username } ))
+    web::Json(json!( { "logged": logged, "username": username } ))
+}
+
+pub async fn test(session: Session) -> impl Responder {
+    web::Json(json!({"d": 0}))
 }

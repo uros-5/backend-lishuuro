@@ -3,9 +3,6 @@ name = "server"
 version = "0.1.0"
 edition = "2021"
 
-[profile.dev]
-debug = 0
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -32,7 +29,10 @@ awc = "2.0.3"
 time = { version = "0.2", features = ["serde"] }
 json_value_merge = "1.1.2"
 actix-cors = "0.5.4"
-shuuro = "0.5.6"
+shuuro = "0.5.81"
 actix-web-actors = "3"
 actix = "0.10.0"
 uuid = { version = "0.8", features = ["v4", "serde"] }
+itertools = "0.10"
+bitintr = "0.3"
+thiserror = "1.0"

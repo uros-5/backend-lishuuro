@@ -71,7 +71,6 @@ pub async fn get_lichess_token(session: &Session, code: &str) -> Token {
             let json = i.json::<Token>().await;
             match json {
                 Ok(tok) => {
-                    println!("{:?}", tok);
                     return tok;
                 }
                 Err(_) => {
@@ -100,14 +99,10 @@ pub async fn get_lichess_user(token: String) -> String {
                 Ok(data) => {
                     return String::from(data.username);
                 }
-                Err(_) => {
-                    println!("error");
-                }
+                Err(_) => {}
             }
         }
-        Err(err) => {
-            println!("{}", err);
-        }
+        Err(err) => {}
     }
     String::from("")
 }

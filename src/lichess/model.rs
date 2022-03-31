@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use serde_json::{Value};
+use serde_json::Value;
 
 // LICHESS MODEL
 

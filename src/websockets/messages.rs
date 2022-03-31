@@ -1,7 +1,6 @@
 use actix::prelude::{Message, Recipient};
 
-use crate::models::model::ActivePlayer;
-
+use crate::models::model::{ActivePlayer, ShuuroGame};
 
 #[derive(Message)]
 #[rtype(result = "()")]
@@ -18,7 +17,7 @@ impl RegularMessage {
     pub fn new(text: String, username: &String, logged: &bool) -> Self {
         RegularMessage {
             text,
-            player: ActivePlayer::new(logged,username)
+            player: ActivePlayer::new(logged, username),
         }
     }
 }
@@ -36,3 +35,30 @@ pub struct Disconnect {
     pub player: ActivePlayer,
 }
 
+#[derive(Message)]
+#[rtype(result = "{}")]
+pub struct GameMessage {
+    pub message_type: GameMessageType,
+}
+
+pub enum GameMessageType {
+    AddingGame {
+        game_id: String,
+        users: [String; 2],
+        shuuro_game: ShuuroGame,
+    },
+}
+
+impl GameMessageType {
+    pub fn new_adding_game(
+        game_id: String,
+        users: [String; 2],
+        shuuro_game: ShuuroGame,
+    ) -> GameMessageType {
+        GameMessageType::AddingGame {
+            game_id,
+            users,
+            shuuro_game,
+        }
+    }
+}

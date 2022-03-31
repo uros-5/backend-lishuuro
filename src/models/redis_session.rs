@@ -1,14 +1,15 @@
+use crate::{
+    lichess::login::{create_verifier, random_username},
+    models::model::{AppState, User},
+};
 use actix_session::Session;
-use crate::{lichess::login::{create_verifier, random_username}, models::model::{AppState, User}};
 use actix_web::web;
 use std::sync::Mutex;
 
 pub async fn set_session(session: &Session, code_verifier: String) {
     let result = session.set("codeVerifier", code_verifier);
     match result {
-        Err(i) => {
-            println!("{:?}", i);
-        }
+        Err(i) => {}
         _ => (),
     }
 }
@@ -16,9 +17,7 @@ pub async fn set_session(session: &Session, code_verifier: String) {
 pub async fn set_username(session: &Session, username: &String) {
     let result = session.set("username", username);
     match result {
-        Err(i) => {
-            println!("{:?}", i);
-        }
+        Err(i) => {}
         _ => (),
     }
 }
@@ -26,9 +25,7 @@ pub async fn set_username(session: &Session, username: &String) {
 pub async fn set_reg(session: &Session, reg: &bool) {
     let result = session.set("reg", reg);
     match result {
-        Err(i) => {
-            println!("{:?}", i);
-        }
+        Err(i) => {}
         _ => (),
     }
 }
@@ -59,9 +56,7 @@ pub async fn new_user(session: &Session, app_data: web::Data<Mutex<AppState>>) -
     let mongo_result = app_data.users.insert_one(&anon, None).await;
     match mongo_result {
         Ok(_) => (),
-        Err(e) => {
-            println!("{:?}", e);
-        }
+        Err(e) => {}
     }
     (username, false)
 }

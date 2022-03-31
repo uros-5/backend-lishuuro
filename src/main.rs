@@ -1,7 +1,7 @@
 mod controller;
+mod lichess;
 mod models;
 mod websockets;
-mod lichess;
 
 use std::sync::Mutex;
 
@@ -10,7 +10,7 @@ use time::Duration;
 use actix_cors::Cors;
 use actix_redis::RedisSession;
 use actix_web::{web, App, HttpServer};
-use controller::{callback, login, vue_user};
+use controller::{callback, login, test, vue_user};
 
 use models::model::AppState;
 use mongodb::{options::ClientOptions, Client};
@@ -21,11 +21,12 @@ use websockets::{lobby::Lobby, start_connection::start_connection};
 use actix::prelude::Actor;
 
 const PRIVATE_KEY: [u8; 32] = [
-    5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5
+    5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
 ];
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    println!("http://localhost:8080/test");
     let mut client_options = ClientOptions::parse("mongodb://127.0.0.1:27017")
         .await
         .expect("No client available");
@@ -48,6 +49,7 @@ async fn main() -> std::io::Result<()> {
             .route("/login", web::get().to(login))
             .route("/callback", web::get().to(callback))
             .route("/vue_user", web::get().to(vue_user))
+            .route("/test", web::get().to(test))
             .service(start_connection)
     })
     .bind(("127.0.0.1", 8080))?
