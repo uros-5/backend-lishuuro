@@ -245,7 +245,7 @@ impl Handler<GameMessage> for Lobby {
                 users,
                 shuuro_game,
             } => {
-                let res = serde_json::json!({"t": "live_game_start", "gameId": game_id, "game_info": &shuuro_game });
+                let res = serde_json::json!({"t": "live_game_start", "game_id": game_id, "game_info": &shuuro_game });
                 self.games.add_game(game_id.clone(), &shuuro_game);
                 self.send_message_to_selected(res, users);
             }
