@@ -7,6 +7,7 @@ use itertools::Itertools;
 use querystring::querify;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use time::OffsetDateTime;
 
 use crate::{
     lichess::login::*,
@@ -77,5 +78,6 @@ pub async fn vue_user(_session: Session) -> impl Responder {
 }
 
 pub async fn test(session: Session) -> impl Responder {
-    web::Json(json!({"d": 0}))
+    let now = OffsetDateTime::now_utc();
+    web::Json(json!({ "d": now.to_string()}))
 }

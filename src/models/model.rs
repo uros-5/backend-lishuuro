@@ -1,7 +1,7 @@
 use json_value_merge::Merge;
 use mongodb::Collection;
 use rand::prelude::*;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 use serde_json::{json, Value};
 use shuuro::{Color, Position, Shop};
 use time::{Duration, OffsetDateTime};
@@ -62,15 +62,19 @@ pub struct ShuuroGame {
     pub incr: Duration,
     pub white: String,
     pub black: String,
-    pub stm: String,
+    pub side_to_move: String,
+    #[serde(serialize_with = "duration_i32")]
     pub white_clock: Duration,
+    #[serde(serialize_with = "duration_i32")]
     pub black_clock: Duration,
+    #[serde(serialize_with = "date_str")]
     pub last_clock: OffsetDateTime,
     pub current_stage: String,
     pub result: String,
-    pub shop_history: Vec<String>,
-    pub deploy_history: Vec<String>,
-    pub fight_history: Vec<String>,
+    pub status: i32,
+    pub shop_history: Vec<(String, u8)>,
+    pub deploy_history: Vec<(String, u16)>,
+    pub fight_history: Vec<(String, u16)>,
     pub white_credit: u16,
     pub black_credit: u16,
 }
@@ -82,12 +86,13 @@ impl Default for ShuuroGame {
             incr: Duration::default(),
             white: String::from(""),
             black: String::from(""),
-            stm: String::from(""),
+            side_to_move: String::from(""),
             white_clock: Duration::default(),
             black_clock: Duration::default(),
             last_clock: OffsetDateTime::now_utc(),
             current_stage: String::from("shop"),
             result: String::from(""),
+            status: -2,
             shop_history: Vec::new(),
             deploy_history: Vec::new(),
             fight_history: Vec::new(),
@@ -100,9 +105,21 @@ impl Default for ShuuroGame {
 impl ShuuroGame {
     fn new(time: i64, incr: i64) -> Self {
         let mut game = ShuuroGame::default();
-        game.min = Duration::new(time * 60, 0);
+        let min_seconds = time * 60;
+        game.min = Duration::new(min_seconds, 0);
         game.incr = Duration::new(incr, 0);
+        game.white_clock = Duration::new(min_seconds, 0);
+        game.black_clock = Duration::new(min_seconds, 0);
         game
+    }
+    pub fn user_color(&self, username: &String) -> Color {
+        if username == &self.white {
+            Color::White
+        } else if username == &self.black {
+            Color::Black
+        } else {
+            Color::NoColor
+        }
     }
 }
 
@@ -194,7 +211,7 @@ impl LobbyGame {
         let mut first = serde_json::json!(&mut self.clone());
         let second = json!({ "t": t });
         first.merge(second);
-        
+
         first
     }
 
@@ -221,17 +238,37 @@ impl LobbyGame {
         }
         c_s
     }
-    
-    pub fn color(&self) -> &String { &self.color }
+
+    pub fn color(&self) -> &String {
+        &self.color
+    }
 }
 
 impl PartialEq for LobbyGame {
     fn eq(&self, other: &LobbyGame) -> bool {
         self.username == other.username
-            && self.variant == other.variant
-            && self.time == other.time
-            && self.incr == other.incr
     }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct GameRequest {
+    pub t: String,
+    pub color: String,
+    pub game_id: String,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct GameMoveBuy {
+    pub t: String,
+    pub game_id: String,
+    pub game_move: String,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct GameGetHand {
+    pub t: String,
+    pub game_id: String,
+    pub color: String,
 }
 
 #[derive(Clone)]
@@ -288,11 +325,18 @@ impl LobbyGames {
         }
     }
 
-    pub fn delete_by_user(&mut self, user: &ActivePlayer) {
-        self.all.retain(|item| &item.username() != &user.username());
-        /*for game in self.all.iter() {
-
-        }*/
+    pub fn delete_by_user(&mut self, user: &ActivePlayer) -> bool {
+        let index = self
+            .all
+            .iter()
+            .position(|x| *x.username() == user.username());
+        match index {
+            Some(i) => {
+                self.all.remove(i);
+                return true;
+            }
+            None => false,
+        }
     }
 
     pub fn response(&self) -> Value {
@@ -300,24 +344,31 @@ impl LobbyGames {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct TimeControl {
+    #[serde(serialize_with = "date_str")]
     last_click: OffsetDateTime,
     inc: Duration,
+    #[serde(serialize_with = "duration_i32")]
     black_player: Duration,
+    #[serde(serialize_with = "duration_i32")]
     white_player: Duration,
     stage: String,
 }
 
 impl TimeControl {
-    fn new(inc: u32, duration: u32) -> Self {
+    pub fn new(inc: i64, duration: i64) -> Self {
         TimeControl {
             last_click: OffsetDateTime::now_utc(),
-            inc: Duration::new(inc as i64, 0),
-            black_player: Duration::new(duration as i64, 0),
-            white_player: Duration::new(duration as i64, 0),
+            inc: Duration::new(inc, 0),
+            black_player: Duration::new(duration, 0),
+            white_player: Duration::new(duration, 0),
             stage: String::from("shop"),
         }
+    }
+    
+    pub fn update_stage(&mut self, stage: String) {
+        self.stage = stage;
     }
 
     pub fn click(&mut self, c: char) -> bool {
@@ -329,16 +380,15 @@ impl TimeControl {
             self.black_player -= elapsed + self.inc;
         }
         self.last_click = now;
+        
         self.time_ok(c)
     }
 
     pub fn time_ok(&self, c: char) -> bool {
         if c == 'w' {
-            return self.white_player.whole_seconds() <= 0
-                && self.white_player.whole_nanoseconds() <= 0;
+            return self.white_player.whole_milliseconds() > 0
         } else if c == 'b' {
-            return self.black_player.whole_seconds() <= 0
-                && self.white_player.whole_nanoseconds() <= 0;
+            return self.black_player.whole_milliseconds() > 0
         }
         false
     }
@@ -350,4 +400,34 @@ impl TimeControl {
             self.black_player = d;
         }
     }
+
+    pub fn get_clock(&self, c: char) -> Duration {
+        if c == 'w' {
+            self.white_player
+        } else if c == 'b' {
+            self.black_player
+        } else {
+            self.white_player
+        }
+    }
+
+    pub fn get_last_click(&self) -> OffsetDateTime {
+        self.last_click
+    }
+}
+
+fn date_str<S>(x: &OffsetDateTime, s: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let date = &x.to_string()[..];
+    s.serialize_str(&date)
+}
+
+fn duration_i32<S>(x: &Duration, s: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let duration = x.whole_milliseconds() as i64;
+    s.serialize_i64(duration)
 }

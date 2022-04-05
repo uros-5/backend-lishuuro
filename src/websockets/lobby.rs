@@ -2,7 +2,10 @@ use super::messages::{
     Connect, Disconnect, GameMessage, GameMessageType, RegularMessage, WsMessage,
 };
 use crate::models::live_games::LiveGames;
-use crate::models::model::{ActivePlayer, ChatItem, LobbyGame, LobbyGames, ShuuroGame, User};
+use crate::models::model::{
+    ActivePlayer, ChatItem, GameGetHand, GameMoveBuy, GameRequest, LobbyGame, LobbyGames,
+    ShuuroGame, User,
+};
 use actix::prelude::{Actor, Context, Handler, Recipient};
 use actix::AsyncContext;
 use actix::WrapFuture;
@@ -79,8 +82,32 @@ impl Handler<RegularMessage> for Lobby {
                             res = serde_json::json!({"t": t, "lines": self.chat});
                         } else if t == "active_players_count" {
                             res = serde_json::json!({"t": t, "cnt": self.active_players.len()});
-                        } else if t == "active_matches_count" {
+                        } else if t == "active_games_count" {
                             res = serde_json::json!({"t": t, "cnt": self.games.shuuro_games.len()});
+                        } else if t == "live_game_start" {
+                            let m = serde_json::from_str::<GameRequest>(&msg.text);
+                            if let Ok(m) = m {
+                                let game = self.games.get_game(m.game_id);
+                                match game {
+                                    Some(g) => {
+                                        res = serde_json::json!({"t": "live_game_start", "game_id": &g.0.clone(), "game_info": &g.1});
+                                    }
+                                    None => (),
+                                }
+                            }
+                        } else if t == "live_game_buy" {
+                            let m = serde_json::from_str::<GameMoveBuy>(&msg.text);
+                            if let Ok(mut m) = m {
+                                self.games
+                                    .buy(m.game_id, m.game_move, &msg.player.username());
+                                return ();
+                            }
+                        } else if t == "live_game_shop_hand" {
+                            let m = serde_json::from_str::<GameGetHand>(&msg.text);
+                            if let Ok(m) = m {
+                                let hand = self.games.get_hand(m.game_id, &msg.player.username());
+                                res = serde_json::json!({"t": t, "hand": &hand});
+                            }
                         } else if t == "home_chat_message" {
                             let m = serde_json::from_str::<ChatItem>(&msg.text);
                             if let Ok(mut m) = m {
@@ -107,19 +134,21 @@ impl Handler<RegularMessage> for Lobby {
                             if let Ok(mut game) = m {
                                 if game.is_valid() {
                                     if self.lobby.can_add(&game) {
-                                        res = game.response(&t);
-                                        self.lobby.add(game);
-                                        return self.send_message_to_all(res);
+                                        self.games.can_add(&game.username());
+                                        if self.games.can_add(&game.username()) {
+                                            res = game.response(&t);
+                                            self.lobby.add(game);
+                                            return self.send_message_to_all(res);
+                                        }
                                     }
                                 }
                             }
                         } else if t == "home_lobby_accept" {
                             let m = serde_json::from_str::<LobbyGame>(&msg.text);
-                            if let Ok(mut game) = m { 
+                            if let Ok(mut game) = m {
                                 if game.is_valid() {
                                     if &game.username() == &msg.player.username() {
                                         res = game.response(&String::from("home_lobby_remove"));
-                                        
                                         let deleted = self.lobby.delete(game);
                                         if deleted >= 0 {
                                             return self.send_message_to_all(res);
@@ -131,10 +160,16 @@ impl Handler<RegularMessage> for Lobby {
                                         let mut shuuro_game = ShuuroGame::from(&game);
                                         shuuro_game.white = users[0].clone();
                                         shuuro_game.black = users[1].clone();
-                                        let res = game.response(&String::from("home_lobby_remove")); 
+                                        let res = game.response(&String::from("home_lobby_remove"));
                                         let deleted = self.lobby.delete(game);
                                         if deleted >= 0 {
                                             self.send_message_to_all(res);
+                                        }
+                                        let deleted = self.lobby.delete_by_user(&msg.player);
+                                        if deleted {
+                                            let temp_res = serde_json::json!({"t": "home_lobby_remove_user",
+                                                "username": &msg.player.username()});
+                                            self.send_message_to_all(temp_res);
                                         }
                                         let db_shuuro_games = self.db_shuuro_games.clone();
                                         self.counter += 1;
@@ -149,7 +184,6 @@ impl Handler<RegularMessage> for Lobby {
                                                     let game_id = id
                                                         .replace("ObjectId(\"", "")
                                                         .replace("\")", "");
-
                                                     ctx2.do_send(GameMessage {
                                                         message_type:
                                                             GameMessageType::new_adding_game(
@@ -214,7 +248,7 @@ impl Handler<Connect> for Lobby {
             );
             self.send_message(
                 &player.0.clone(),
-                serde_json::json!({"t": "active_matches_count", "cnt": self.games.shuuro_games.len()}),
+                serde_json::json!({"t": "active_games_count", "cnt": self.games.shuuro_games.len()}),
             );
         }
     }
@@ -229,7 +263,7 @@ impl Handler<Disconnect> for Lobby {
         let player_count =
             serde_json::json!({"t": "active_players_count", "cnt": self.active_players.len()});
         let matches_count =
-            serde_json::json!({"t": "active_matches_count", "cnt": self.games.shuuro_games.len()});
+            serde_json::json!({"t": "active_games_count", "cnt": self.games.shuuro_games.len()});
         self.send_message_to_all(player_count);
         self.send_message_to_all(matches_count);
     }
@@ -248,6 +282,8 @@ impl Handler<GameMessage> for Lobby {
                 let res = serde_json::json!({"t": "live_game_start", "game_id": game_id, "game_info": &shuuro_game });
                 self.games.add_game(game_id.clone(), &shuuro_game);
                 self.send_message_to_selected(res, users);
+                let res = serde_json::json!({"t": "active_games_count", "cnt": self.games.shuuro_games.len()});
+                self.send_message_to_all(res);
             }
         }
     }

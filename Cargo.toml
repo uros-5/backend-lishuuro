@@ -29,7 +29,7 @@ awc = "2.0.3"
 time = { version = "0.2", features = ["serde"] }
 json_value_merge = "1.1.2"
 actix-cors = "0.5.4"
-shuuro = "0.5.81"
+shuuro = "0.5.82"
 actix-web-actors = "3"
 actix = "0.10.0"
 uuid = { version = "0.8", features = ["v4", "serde"] }
