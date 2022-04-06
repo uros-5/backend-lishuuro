@@ -366,7 +366,7 @@ impl TimeControl {
             stage: String::from("shop"),
         }
     }
-    
+
     pub fn update_stage(&mut self, stage: String) {
         self.stage = stage;
     }
@@ -379,18 +379,18 @@ impl TimeControl {
             self.black_player -= elapsed + self.inc;
         }
         self.last_click = OffsetDateTime::now_utc();
-        
+
         self.time_ok(c)
     }
 
     pub fn time_ok(&self, c: char) -> bool {
         if self.stage == String::from("shop") {
-            return (self.white_player - self.elapsed()).whole_milliseconds() > 0
+            return (self.white_player - self.elapsed()).whole_milliseconds() > 0;
         }
         if c == 'w' {
-            return self.white_player.whole_milliseconds() > 0
+            return self.white_player.whole_milliseconds() > 0;
         } else if c == 'b' {
-            return self.black_player.whole_milliseconds() > 0
+            return self.black_player.whole_milliseconds() > 0;
         }
         false
     }

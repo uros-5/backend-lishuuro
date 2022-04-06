@@ -13,7 +13,7 @@ pub struct LiveGames {
 impl LiveGames {
     pub fn can_add(&self, username: &String) -> bool {
         for i in &self.shuuro_games {
-            if &i.1.game.white == username || &i.1.game.black == username {
+            if i.1.can_add(&username) {
                 return false;
             }
         }
@@ -52,42 +52,7 @@ impl LiveGames {
         let game = self.shuuro_games.get_mut(id);
         match game {
             Some(g) => {
-                if &g.game.current_stage == &String::from("shop") {
-                    if &game_move.len() == &2 {
-                        let color = &g.game.user_color(username);
-                        if *color == Color::NoColor {
-                            return ();
-                        }
-                        let piece = game_move.chars().last();
-                        if let Some(s) = piece {
-                            let piece = Piece::from_sfen(s);
-                            if let Some(p) = piece {
-                                let m = Move::Buy { piece: p };
-                                if p.color != *color {
-                                    return ();
-                                }
-                                let c = color.to_string().chars().nth(0).unwrap();
-                                if g.time_control.time_ok(c) {
-                                    g.shop.play(m);
-                                }
-                                match color {
-                                    Color::White => {
-                                        g.game.white_credit = g.shop.credit(*color) as u16;
-                                    }
-                                    Color::Black => {
-                                        g.game.black_credit = g.shop.credit(*color) as u16;
-                                    }
-                                    _ => (),
-                                }
-                            } else {
-                                let c = color.to_string().chars().nth(0).unwrap();
-                                if g.time_control.time_ok(c) {
-                                    g.shop.confirm(*color);
-                                }
-                            }
-                        }
-                    }
-                }
+                g.buy(game_move, username);
             }
             None => {
                 println!("game not found")
@@ -98,8 +63,7 @@ impl LiveGames {
     pub fn players(&self, game_id: &String) -> [String; 2] {
         let game = self.shuuro_games.get(game_id);
         if let Some(g) = game {
-            let players = [g.game.white.clone(), g.game.black.clone()];
-            return players;
+            return g.players();
         }
         [String::from(""), String::from("")]
     }
@@ -107,12 +71,7 @@ impl LiveGames {
     pub fn is_shop_done(&self, game_id: &String) -> bool {
         let game = self.shuuro_games.get(game_id);
         if let Some(g) = game {
-            let players = [
-                g.shop.is_confirmed(Color::White),
-                g.shop.is_confirmed(Color::Black),
-            ];
-            println!("{:?}", &players);
-            return !players.contains(&false);
+            return !g.confirmed_players().contains(&false);
         }
         false
     }
@@ -122,20 +81,13 @@ impl LiveGames {
 
         match game {
             Some(g) => {
-                let color = &g.game.user_color(username);
-                if *color == Color::NoColor && g.game.current_stage == "shop" {
-                    return String::from("");
-                }
-                if g.game.current_stage == "shop" || g.game.current_stage == "deploy" {
-                    return g.shop.to_sfen(*color);
-                }
+                return g.get_hand(username);
             }
             None => (),
         }
         String::from("")
     }
 }
-
 impl Default for LiveGames {
     fn default() -> Self {
         LiveGames {
@@ -177,5 +129,73 @@ impl ShuuroLive {
         self.game.last_clock = self.time_control.get_last_click();
         self.game.status = -2;
         self.game.result = String::from("*");
+    }
+
+    pub fn can_add(&self, username: &String) -> bool {
+        if &self.game.white == username || &self.game.black == username {
+            return false;
+        }
+        true
+    }
+
+    pub fn players(&self) -> [String; 2] {
+        [self.game.white.clone(), self.game.black.clone()]
+    }
+
+    pub fn confirmed_players(&self) -> [bool; 2] {
+        [
+            self.shop.is_confirmed(Color::White),
+            self.shop.is_confirmed(Color::Black),
+        ]
+    }
+
+    pub fn get_hand(&self, username: &String) -> String {
+        let color = &self.game.user_color(username);
+        if *color == Color::NoColor && self.game.current_stage == "shop" {
+            return String::from("");
+        }
+        if self.game.current_stage == "shop" || self.game.current_stage == "deploy" {
+            return self.shop.to_sfen(*color);
+        }
+        return String::from("");
+    }
+
+    pub fn buy(&mut self, game_move: String, username: &String) {
+        if &self.game.current_stage == &String::from("shop") {
+            if &game_move.len() == &2 {
+                let color = &self.game.user_color(username);
+                if *color == Color::NoColor {
+                    return ();
+                }
+                let piece = game_move.chars().last();
+                if let Some(s) = piece {
+                    let piece = Piece::from_sfen(s);
+                    if let Some(p) = piece {
+                        let m = Move::Buy { piece: p };
+                        if p.color != *color {
+                            return ();
+                        }
+                        let c = color.to_string().chars().nth(0).unwrap();
+                        if self.time_control.time_ok(c) {
+                            self.shop.play(m);
+                        }
+                        match color {
+                            Color::White => {
+                                self.game.white_credit = self.shop.credit(*color) as u16;
+                            }
+                            Color::Black => {
+                                self.game.black_credit = self.shop.credit(*color) as u16;
+                            }
+                            _ => (),
+                        }
+                    } else {
+                        let c = color.to_string().chars().nth(0).unwrap();
+                        if self.time_control.time_ok(c) {
+                            self.shop.confirm(*color);
+                        }
+                    }
+                }
+            }
+        }
     }
 }
