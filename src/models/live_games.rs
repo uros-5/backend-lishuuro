@@ -48,17 +48,16 @@ impl LiveGames {
     }
 
     // another parameter username
-    pub fn buy(&mut self, id: String, game_move: String, username: &String) {
-        let game = self.shuuro_games.get_mut(&id);
+    pub fn buy(&mut self, id: &String, game_move: String, username: &String) {
+        let game = self.shuuro_games.get_mut(id);
         match game {
             Some(g) => {
-                if &g.game.current_stage == &String::from("shop") { 
+                if &g.game.current_stage == &String::from("shop") {
                     if &game_move.len() == &2 {
                         let color = &g.game.user_color(username);
                         if *color == Color::NoColor {
                             return ();
                         }
-                        // before that we check if clock is fine
                         let piece = game_move.chars().last();
                         if let Some(s) = piece {
                             let piece = Piece::from_sfen(s);
@@ -68,7 +67,6 @@ impl LiveGames {
                                     return ();
                                 }
                                 let c = color.to_string().chars().nth(0).unwrap();
-                                g.time_control.click(c);
                                 if g.time_control.time_ok(c) {
                                     g.shop.play(m);
                                 }
@@ -81,6 +79,11 @@ impl LiveGames {
                                     }
                                     _ => (),
                                 }
+                            } else {
+                                let c = color.to_string().chars().nth(0).unwrap();
+                                if g.time_control.time_ok(c) {
+                                    g.shop.confirm(*color);
+                                }
                             }
                         }
                     }
@@ -92,18 +95,24 @@ impl LiveGames {
         }
     }
 
-    pub fn confirm(&mut self, game_id: String, username: &String) -> bool {
-        let game = self.shuuro_games.get_mut(&game_id);
+    pub fn players(&self, game_id: &String) -> [String; 2] {
+        let game = self.shuuro_games.get(game_id);
         if let Some(g) = game {
-            if &g.game.current_stage == &String::from("shop") {
-                let color = g.game.user_color(username);
-                if color != Color::NoColor {
-                    g.shop.confirm(color);
-                    if g.shop.is_confirmed(color.flip()) {
-                        return true;
-                    }
-                }
-            }
+            let players = [g.game.white.clone(), g.game.black.clone()];
+            return players;
+        }
+        [String::from(""), String::from("")]
+    }
+
+    pub fn is_shop_done(&self, game_id: &String) -> bool {
+        let game = self.shuuro_games.get(game_id);
+        if let Some(g) = game {
+            let players = [
+                g.shop.is_confirmed(Color::White),
+                g.shop.is_confirmed(Color::Black),
+            ];
+            println!("{:?}", &players);
+            return !players.contains(&false);
         }
         false
     }
@@ -114,10 +123,10 @@ impl LiveGames {
         match game {
             Some(g) => {
                 let color = &g.game.user_color(username);
-                if *color == Color::NoColor {
+                if *color == Color::NoColor && g.game.current_stage == "shop" {
                     return String::from("");
                 }
-                if g.game.current_stage == "shop" {
+                if g.game.current_stage == "shop" || g.game.current_stage == "deploy" {
                     return g.shop.to_sfen(*color);
                 }
             }

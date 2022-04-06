@@ -24,7 +24,7 @@ pub async fn start_connection(
     // username == '' create add to session add to mongo
     if username == "" {
         username = random_username();
-        let anon = User::new(random_username());
+        let anon = User::new(username.clone());
         let verifier = create_verifier();
         set_session(&session, verifier).await;
         set_username(&session, &anon.username).await;

@@ -95,14 +95,23 @@ impl Handler<RegularMessage> for Lobby {
                                     None => (),
                                 }
                             }
-                        } else if t == "live_game_buy" {
+                        } else if t == "live_game_buy" || t == "live_game_confirm" {
                             let m = serde_json::from_str::<GameMoveBuy>(&msg.text);
-                            if let Ok(mut m) = m {
+                            if let Ok(m) = m {
                                 self.games
-                                    .buy(m.game_id, m.game_move, &msg.player.username());
-                                return ();
+                                    .buy(&m.game_id, m.game_move, &msg.player.username());
+                                // if both sides are confirmed then notify them and redirect players.
+                                if self.games.is_shop_done(&m.game_id) {
+                                    res = serde_json::json!({"t": "redirect", "path": format!("/shuuro/set/{}", &m.game_id)});
+                                    return self.send_message_to_selected(
+                                        res,
+                                        self.games.players(&m.game_id),
+                                    );
+                                } else {
+                                    return ();
+                                }
                             }
-                        } else if t == "live_game_shop_hand" {
+                        } else if t == "live_game_hand" {
                             let m = serde_json::from_str::<GameGetHand>(&msg.text);
                             if let Ok(m) = m {
                                 let hand = self.games.get_hand(m.game_id, &msg.player.username());
@@ -231,6 +240,7 @@ impl Handler<Connect> for Lobby {
             None => {
                 let player = msg.player.clone();
                 self.active_players.insert(msg.player, msg.addr);
+                println!("{}", &player.username());
                 self.send_message(
                     &player.clone(),
                     serde_json::json!({"t": "connected","msg": "User connected"}),

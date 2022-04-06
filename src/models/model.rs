@@ -372,19 +372,21 @@ impl TimeControl {
     }
 
     pub fn click(&mut self, c: char) -> bool {
-        let now = OffsetDateTime::now_utc();
-        let elapsed = now - self.last_click;
+        let elapsed = self.elapsed();
         if c == 'w' {
             self.white_player -= elapsed + self.inc;
         } else if c == 'b' {
             self.black_player -= elapsed + self.inc;
         }
-        self.last_click = now;
+        self.last_click = OffsetDateTime::now_utc();
         
         self.time_ok(c)
     }
 
     pub fn time_ok(&self, c: char) -> bool {
+        if self.stage == String::from("shop") {
+            return (self.white_player - self.elapsed()).whole_milliseconds() > 0
+        }
         if c == 'w' {
             return self.white_player.whole_milliseconds() > 0
         } else if c == 'b' {
@@ -413,6 +415,10 @@ impl TimeControl {
 
     pub fn get_last_click(&self) -> OffsetDateTime {
         self.last_click
+    }
+
+    fn elapsed(&self) -> Duration {
+        OffsetDateTime::now_utc() - self.last_click
     }
 }
 
