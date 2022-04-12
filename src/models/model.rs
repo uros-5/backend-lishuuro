@@ -58,7 +58,9 @@ impl User {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShuuroGame {
+    #[serde(serialize_with = "duration_i32")]
     pub min: Duration,
+    #[serde(serialize_with = "duration_i32")]
     pub incr: Duration,
     pub white: String,
     pub black: String,
@@ -77,6 +79,9 @@ pub struct ShuuroGame {
     pub fight_history: Vec<(String, u16)>,
     pub white_credit: u16,
     pub black_credit: u16,
+    pub white_hand: String,
+    pub black_hand: String,
+    pub sfen: String
 }
 
 impl Default for ShuuroGame {
@@ -98,6 +103,9 @@ impl Default for ShuuroGame {
             fight_history: Vec::new(),
             white_credit: 800,
             black_credit: 800,
+            white_hand: String::from(""),
+            black_hand: String::from(""),
+            sfen: String::from("")
         }
     }
 }
@@ -271,6 +279,12 @@ pub struct GameGetHand {
     pub color: String,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct GameGetConfirmed {
+    pub t: String,
+    pub game_id: String,
+}
+
 #[derive(Clone)]
 pub struct LobbyGames {
     all: Vec<LobbyGame>,
@@ -369,27 +383,33 @@ impl TimeControl {
 
     pub fn update_stage(&mut self, stage: String) {
         self.stage = stage;
-    }
-
-    pub fn click(&mut self, c: char) -> bool {
-        let elapsed = self.elapsed();
-        if c == 'w' {
-            self.white_player -= elapsed + self.inc;
-        } else if c == 'b' {
-            self.black_player -= elapsed + self.inc;
-        }
         self.last_click = OffsetDateTime::now_utc();
-
-        self.time_ok(c)
     }
 
-    pub fn time_ok(&self, c: char) -> bool {
+    pub fn click(&mut self, color: Color) -> bool {
+        let elapsed = self.elapsed();
+        let c = color.to_string();
+        if c == "w" {
+            self.white_player -= elapsed;
+            self.white_player += self.inc;
+        } else if c == "b" {
+            self.black_player -= elapsed;
+            self.black_player += self.inc;
+        }
+        if self.stage != "shop" {
+            self.last_click = OffsetDateTime::now_utc();
+        }
+
+        self.time_ok(&c)
+    }
+
+    pub fn time_ok(&self, c: &String) -> bool {
         if self.stage == String::from("shop") {
             return (self.white_player - self.elapsed()).whole_milliseconds() > 0;
         }
-        if c == 'w' {
+        if c == "w" {
             return self.white_player.whole_milliseconds() > 0;
-        } else if c == 'b' {
+        } else if c == "b" {
             return self.black_player.whole_milliseconds() > 0;
         }
         false

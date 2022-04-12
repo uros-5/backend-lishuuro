@@ -3,8 +3,8 @@ use super::messages::{
 };
 use crate::models::live_games::LiveGames;
 use crate::models::model::{
-    ActivePlayer, ChatItem, GameGetHand, GameMoveBuy, GameRequest, LobbyGame, LobbyGames,
-    ShuuroGame, User,
+    ActivePlayer, ChatItem, GameGetConfirmed, GameGetHand, GameMoveBuy, GameRequest, LobbyGame,
+    LobbyGames, ShuuroGame, User,
 };
 use actix::prelude::{Actor, Context, Handler, Recipient};
 use actix::AsyncContext;
@@ -12,8 +12,6 @@ use actix::WrapFuture;
 use mongodb::Collection;
 use serde_json;
 use std::collections::HashMap;
-use std::thread;
-use std::time::Duration;
 
 type Socket = Recipient<WsMessage>;
 
@@ -101,8 +99,19 @@ impl Handler<RegularMessage> for Lobby {
                                 self.games
                                     .buy(&m.game_id, m.game_move, &msg.player.username());
                                 // if both sides are confirmed then notify them and redirect players.
-                                if self.games.is_shop_done(&m.game_id) {
-                                    res = serde_json::json!({"t": "redirect", "path": format!("/shuuro/set/{}", &m.game_id)});
+                                if !self.games.confirmed_players(&m.game_id).contains(&false) {
+                                    res = self.games.set_deploy(&m.game_id);
+                                    let res2 = serde_json::json!({"t": "pause_confirmed", "confirmed": &self.games.confirmed_players(&m.game_id)});
+                                    self.send_message_to_selected(
+                                        res2,
+                                        self.games.players(&m.game_id),
+                                    );
+                                    return self.send_message_to_selected(
+                                        res,
+                                        self.games.players(&m.game_id),
+                                    );
+                                } else if t == "live_game_confirm" {
+                                    res = serde_json::json!({"t": "pause_confirmed", "confirmed": &self.games.confirmed_players(&m.game_id)});
                                     return self.send_message_to_selected(
                                         res,
                                         self.games.players(&m.game_id),
@@ -116,6 +125,12 @@ impl Handler<RegularMessage> for Lobby {
                             if let Ok(m) = m {
                                 let hand = self.games.get_hand(m.game_id, &msg.player.username());
                                 res = serde_json::json!({"t": t, "hand": &hand});
+                            }
+                        } else if t == "live_game_confirmed" {
+                            let m = serde_json::from_str::<GameGetConfirmed>(&msg.text);
+                            if let Ok(m) = m {
+                                let confirmed = self.games.confirmed_players(&m.game_id);
+                                res = serde_json::json!({"t": t, "confirmed": &confirmed});
                             }
                         } else if t == "home_chat_message" {
                             let m = serde_json::from_str::<ChatItem>(&msg.text);
