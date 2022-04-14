@@ -1,5 +1,5 @@
 use serde_json::Value;
-use shuuro::{Color, Move, Piece, Position, Shop};
+use shuuro::{init, Color, Move, PieceType, Position, Shop};
 
 use crate::models::model::ShuuroGame;
 use std::collections::HashMap;
@@ -122,6 +122,7 @@ impl LiveGames {
 }
 impl Default for LiveGames {
     fn default() -> Self {
+        init();
         LiveGames {
             shuuro_games: HashMap::new(),
         }
@@ -280,13 +281,15 @@ impl ShuuroLive {
                         } else if self.time_control.time_ok(&color.to_string()) {
                             if self.game.side_to_move == color.to_string() {
                                 self.deploy.place(piece, to);
-                                if self.deploy.ply() != ply {
+                                let ply_2 = self.deploy.ply();
+                                if ply_2 != ply {
                                     self.time_control.click(color);
                                     self.game.side_to_move = self.deploy.side_to_move().to_string();
                                     self.game.sfen = self.deploy.generate_sfen();
-                                    return Some(
-                                        serde_json::json!({"t": "live_game_place", "move": game_move, "game_id": "" }),
-                                    );
+                                    return Some(serde_json::json!({"t": "live_game_place",
+                                            "move": game_move, 
+                                            "game_id": "",
+                                            "to_fight": self.is_deployment_over()}));
                                 }
                             }
                         }
@@ -297,5 +300,15 @@ impl ShuuroLive {
             }
         }
         return None;
+    }
+
+    pub fn is_deployment_over(&self) -> bool {
+        let mut completed: [bool; 3] = [false, false, false];
+        let color_iter = Color::iter();
+        for i in color_iter {
+            completed[i.index()] = self.deploy.is_hand_empty(&i, PieceType::Plinth);
+        }
+        completed[2] = true;
+        !completed.contains(&false)
     }
 }
