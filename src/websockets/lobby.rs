@@ -3,7 +3,7 @@ use super::messages::{
 };
 use crate::models::live_games::LiveGames;
 use crate::models::model::{
-    ActivePlayer, ChatItem, GameGetConfirmed, GameGetHand, GameMoveBuy, GameRequest, LobbyGame,
+    ActivePlayer, ChatItem, GameGetConfirmed, GameGetHand, GameMove, GameRequest, LobbyGame,
     LobbyGames, ShuuroGame, User,
 };
 use actix::prelude::{Actor, Context, Handler, Recipient};
@@ -94,7 +94,7 @@ impl Handler<RegularMessage> for Lobby {
                                 }
                             }
                         } else if t == "live_game_buy" || t == "live_game_confirm" {
-                            let m = serde_json::from_str::<GameMoveBuy>(&msg.text);
+                            let m = serde_json::from_str::<GameMove>(&msg.text);
                             if let Ok(m) = m {
                                 self.games
                                     .buy(&m.game_id, m.game_move, &msg.player.username());
@@ -118,6 +118,23 @@ impl Handler<RegularMessage> for Lobby {
                                     );
                                 } else {
                                     return ();
+                                }
+                            }
+                        } else if t == "live_game_place" {
+                            let m = serde_json::from_str::<GameMove>(&msg.text);
+                            if let Ok(m) = m {
+                                let placed = self.games.place(
+                                    &m.game_id,
+                                    m.game_move,
+                                    &msg.player.username(),
+                                );
+                                if let Some(mut placed) = placed {
+                                    *placed.get_mut("game_id").unwrap() =
+                                        serde_json::json!(m.game_id);
+                                    return self.send_message_to_selected(
+                                        placed,
+                                        self.games.players(&m.game_id),
+                                    );
                                 }
                             }
                         } else if t == "live_game_hand" {

@@ -81,7 +81,7 @@ pub struct ShuuroGame {
     pub black_credit: u16,
     pub white_hand: String,
     pub black_hand: String,
-    pub sfen: String
+    pub sfen: String,
 }
 
 impl Default for ShuuroGame {
@@ -105,7 +105,7 @@ impl Default for ShuuroGame {
             black_credit: 800,
             white_hand: String::from(""),
             black_hand: String::from(""),
-            sfen: String::from("")
+            sfen: String::from(""),
         }
     }
 }
@@ -266,7 +266,7 @@ pub struct GameRequest {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct GameMoveBuy {
+pub struct GameMove {
     pub t: String,
     pub game_id: String,
     pub game_move: String,
@@ -399,7 +399,6 @@ impl TimeControl {
         if self.stage != "shop" {
             self.last_click = OffsetDateTime::now_utc();
         }
-
         self.time_ok(&c)
     }
 
