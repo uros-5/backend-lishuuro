@@ -137,6 +137,23 @@ impl Handler<RegularMessage> for Lobby {
                                     );
                                 }
                             }
+                        } else if t == "live_game_play" {
+                            let m = serde_json::from_str::<GameMove>(&msg.text);
+                            if let Ok(m) = m {
+                                let played = self.games.play(
+                                    &m.game_id,
+                                    m.game_move,
+                                    &msg.player.username(),
+                                );
+                                if let Some(mut played) = played {
+                                    *played.get_mut("game_id").unwrap() =
+                                        serde_json::json!(m.game_id);
+                                    return self.send_message_to_selected(
+                                        played,
+                                        self.games.players(&m.game_id),
+                                    );
+                                }
+                            }
                         } else if t == "live_game_hand" {
                             let m = serde_json::from_str::<GameGetHand>(&msg.text);
                             if let Ok(m) = m {

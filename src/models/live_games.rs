@@ -72,6 +72,17 @@ impl LiveGames {
         None
     }
 
+    pub fn play(&mut self, id: &String, game_move: String, username: &String) -> Option<Value> {
+        let game = self.shuuro_games.get_mut(id);
+        match game {
+            Some(g) => return g.play(game_move, username),
+            None => {
+                println!("game not found")
+            }
+        }
+        None
+    }
+
     pub fn players(&self, game_id: &String) -> [String; 2] {
         let game = self.shuuro_games.get(game_id);
         if let Some(g) = game {
@@ -267,6 +278,14 @@ impl ShuuroLive {
         self.game.sfen = self.deploy.to_sfen();
     }
 
+    pub fn set_fight(&mut self, color: Color) {
+        self.game.current_stage = String::from("fight");
+        self.time_control.update_stage(String::from("fight"));
+        self.time_control.click(color);
+        let sfen = self.deploy.generate_sfen();
+        self.fight.set_sfen(&sfen.as_str());
+    }
+
     pub fn place(&mut self, game_move: String, username: &String) -> Option<Value> {
         if self.game.current_stage == "deploy" {
             if let Some(m) = Move::from_sfen(game_move.as_str()) {
@@ -286,6 +305,10 @@ impl ShuuroLive {
                                     self.time_control.click(color);
                                     self.game.side_to_move = self.deploy.side_to_move().to_string();
                                     self.game.sfen = self.deploy.generate_sfen();
+                                    let to_fight = self.is_deployment_over();
+                                    if to_fight {
+                                        self.set_fight(color);
+                                    }
                                     return Some(serde_json::json!({"t": "live_game_place",
                                             "move": game_move, 
                                             "game_id": "",
@@ -300,6 +323,48 @@ impl ShuuroLive {
             }
         }
         return None;
+    }
+
+    pub fn play(&mut self, game_move: String, username: &String) -> Option<Value> {
+        if self.game.current_stage == "fight" {
+            if let Some(m) = Move::from_sfen(game_move.as_str()) {
+                match m {
+                    Move::Normal {
+                        from,
+                        to,
+                        promote: _,
+                    } => {
+                        let color = self.game.user_color(username);
+                        if color == Color::NoColor {
+                            return None;
+                        } else if self.time_control.time_ok(&color.to_string()) {
+                            if let Some(piece) = self.fight.piece_at(from) {
+                                if piece.color == color {
+                                    if let Ok(m) = self
+                                        .fight
+                                        .play(from.to_string().as_str(), to.to_string().as_str())
+                                    {
+                                        let res = serde_json::json!({"t": "live_game_play",
+                                        "game_move": game_move,
+                                        "game_id": "", "outcome": m.to_string(
+                                        )});
+                                        self.game.side_to_move =
+                                            self.fight.side_to_move().to_string();
+                                        self.game.sfen = self.fight.generate_sfen();
+                                        self.time_control.click(color);
+                                        return Some(res);
+                                    } else {
+                                        return None;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    _ => (),
+                }
+            }
+        }
+        None
     }
 
     pub fn is_deployment_over(&self) -> bool {
