@@ -323,6 +323,9 @@ impl Handler<Disconnect> for Lobby {
             serde_json::json!({"t": "active_players_count", "cnt": self.active_players.len()});
         let matches_count =
             serde_json::json!({"t": "active_games_count", "cnt": self.games.shuuro_games.len()});
+        let temp_res = serde_json::json!({"t": "home_lobby_remove_user",
+                                                "username": &msg.player.username()});
+        self.send_message_to_all(temp_res);
         self.send_message_to_all(player_count);
         self.send_message_to_all(matches_count);
     }

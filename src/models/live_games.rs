@@ -1,5 +1,5 @@
 use serde_json::Value;
-use shuuro::{init, Color, Move, PieceType, Position, Shop};
+use shuuro::{init, position::Outcome, Color, Move, PieceType, Position, Shop};
 
 use crate::models::model::ShuuroGame;
 use std::collections::HashMap;
@@ -302,9 +302,11 @@ impl ShuuroLive {
                                 self.deploy.place(piece, to);
                                 let ply_2 = self.deploy.ply();
                                 if ply_2 != ply {
+                                    let m = self.deploy.get_sfen_history().last().unwrap().clone();
                                     self.time_control.click(color);
                                     self.game.side_to_move = self.deploy.side_to_move().to_string();
                                     self.game.sfen = self.deploy.generate_sfen();
+                                    self.game.deploy_history.push(m);
                                     let to_fight = self.is_deployment_over();
                                     if to_fight {
                                         self.set_fight(color);
@@ -351,6 +353,9 @@ impl ShuuroLive {
                                         self.game.side_to_move =
                                             self.fight.side_to_move().to_string();
                                         self.game.sfen = self.fight.generate_sfen();
+                                        let m =
+                                            self.fight.get_sfen_history().last().unwrap().clone();
+                                        self.game.fight_history.push(m);
                                         self.time_control.click(color);
                                         return Some(res);
                                     } else {
@@ -375,5 +380,29 @@ impl ShuuroLive {
         }
         completed[2] = true;
         !completed.contains(&false)
+    }
+
+    pub fn update_status(&mut self) {
+        match self.fight.outcome() {
+            Outcome::Check { color: _ } => {
+                self.game.status = -1;
+            }
+            Outcome::Nothing => {
+                self.game.status = -1;
+            }
+            Outcome::Stalemate => {
+                self.game.status = 3;
+            }
+            Outcome::Draw => {
+                self.game.status = 5;
+            }
+            Outcome::Checkmate { color } => {
+                self.game.status = 1;
+                self.game.result = color.to_string();
+            }
+            _ => {
+                self.game.status = 4;
+            }
+        }
     }
 }
