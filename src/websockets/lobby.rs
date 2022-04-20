@@ -148,6 +148,12 @@ impl Handler<RegularMessage> for Lobby {
                                 if let Some(mut played) = played {
                                     *played.get_mut("game_id").unwrap() =
                                         serde_json::json!(m.game_id);
+                                    let status = &played["status"].as_i64().unwrap();
+                                    if status > &1 {
+                                        println!("{status}");
+                                        self.games.remove_game(&m.game_id);
+                                    }
+
                                     return self.send_message_to_selected(
                                         played,
                                         self.games.players(&m.game_id),

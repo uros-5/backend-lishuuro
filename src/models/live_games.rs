@@ -25,6 +25,10 @@ impl LiveGames {
         self.shuuro_games.insert(id, ShuuroLive::from(game));
     }
 
+    pub fn remove_game(&mut self, id: &String) {
+        self.shuuro_games.remove(id);
+    }
+
     pub fn get_game(&mut self, id: String) -> Option<(String, ShuuroGame)> {
         let game = self.shuuro_games.get_mut(&id);
         match game {
@@ -346,13 +350,16 @@ impl ShuuroLive {
                                         .fight
                                         .play(from.to_string().as_str(), to.to_string().as_str())
                                     {
-                                        let res = serde_json::json!({"t": "live_game_play",
+                                        let mut res = serde_json::json!({"t": "live_game_play",
                                         "game_move": game_move,
-                                        "game_id": "", "outcome": m.to_string(
-                                        )});
+                                        "status": 0 as i64,
+                                        "game_id": "", "outcome": m.to_string()});
                                         self.game.side_to_move =
                                             self.fight.side_to_move().to_string();
                                         self.game.sfen = self.fight.generate_sfen();
+                                        self.update_status();
+                                        *res.get_mut("status").unwrap() =
+                                            serde_json::json!(self.game.status as i64);
                                         let m =
                                             self.fight.get_sfen_history().last().unwrap().clone();
                                         self.game.fight_history.push(m);
@@ -396,12 +403,17 @@ impl ShuuroLive {
             Outcome::Draw => {
                 self.game.status = 5;
             }
+            Outcome::DrawByRepetition => self.game.status = 4,
+            Outcome::DrawByMaterial => self.game.status = 6,
             Outcome::Checkmate { color } => {
                 self.game.status = 1;
                 self.game.result = color.to_string();
             }
-            _ => {
-                self.game.status = 4;
+            Outcome::MoveOk => {
+                self.game.status = -1;
+            }
+            Outcome::MoveNotOk => {
+                self.game.status = -2;
             }
         }
     }
