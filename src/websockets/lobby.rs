@@ -131,10 +131,12 @@ impl Handler<RegularMessage> for Lobby {
                                 if let Some(mut placed) = placed {
                                     *placed.get_mut("game_id").unwrap() =
                                         serde_json::json!(m.game_id);
-                                    return self.send_message_to_selected(
-                                        placed,
+                                    self.send_message_to_selected(
+                                        placed.clone(),
                                         self.games.players(&m.game_id),
                                     );
+                                    if placed.get("first_move_error").unwrap() == &serde_json::json!(true) { self.games.remove_game(&m.game_id); }
+                                    return ();
                                 }
                             }
                         } else if t == "live_game_play" {
@@ -149,15 +151,17 @@ impl Handler<RegularMessage> for Lobby {
                                     *played.get_mut("game_id").unwrap() =
                                         serde_json::json!(m.game_id);
                                     let status = &played["status"].as_i64().unwrap();
-                                    if status > &1 {
-                                        println!("{status}");
-                                        self.games.remove_game(&m.game_id);
-                                    }
+                                   
 
-                                    return self.send_message_to_selected(
+                                    self.send_message_to_selected(
                                         played,
                                         self.games.players(&m.game_id),
                                     );
+                                     if status > &1 {
+                                        println!("{status}");
+                                        self.games.remove_game(&m.game_id);
+                                     }
+                                    return ();
                                 }
                             }
                         } else if t == "live_game_hand" {

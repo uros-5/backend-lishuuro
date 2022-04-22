@@ -282,12 +282,14 @@ impl ShuuroLive {
         self.game.sfen = self.deploy.to_sfen();
     }
 
-    pub fn set_fight(&mut self, color: Color) {
+    pub fn set_fight(&mut self, color: Color) -> bool {
         self.game.current_stage = String::from("fight");
         self.time_control.update_stage(String::from("fight"));
         self.time_control.click(color);
+        self.game.last_clock = self.time_control.get_last_click();
         let sfen = self.deploy.generate_sfen();
         self.fight.set_sfen(&sfen.as_str());
+        self.fight.in_check(self.fight.side_to_move().flip())
     }
 
     pub fn place(&mut self, game_move: String, username: &String) -> Option<Value> {
@@ -310,15 +312,24 @@ impl ShuuroLive {
                                     self.time_control.click(color);
                                     self.game.side_to_move = self.deploy.side_to_move().to_string();
                                     self.game.sfen = self.deploy.generate_sfen();
+                                    self.game.last_clock = self.time_control.get_last_click();
+                                    self.game.black_clock = self.time_control.get_clock('b');
+                                    self.game.white_clock = self.time_control.get_clock('w');
                                     self.game.deploy_history.push(m);
                                     let to_fight = self.is_deployment_over();
+                                    let mut first_move_error = false;
                                     if to_fight {
                                         self.set_fight(color);
+                                        first_move_error = self.set_fight(color);
+                                        if first_move_error {
+                                            self.game.status = 7;
+                                        }
                                     }
                                     return Some(serde_json::json!({"t": "live_game_place",
                                             "move": game_move, 
                                             "game_id": "",
-                                            "to_fight": self.is_deployment_over()}));
+                                            "to_fight": self.is_deployment_over(),
+                                            "first_move_error": first_move_error }));
                                 }
                             }
                         }
@@ -364,6 +375,9 @@ impl ShuuroLive {
                                             self.fight.get_sfen_history().last().unwrap().clone();
                                         self.game.fight_history.push(m);
                                         self.time_control.click(color);
+                                        self.game.last_clock = self.time_control.get_last_click();
+                                        self.game.black_clock = self.time_control.get_clock('b');
+                                        self.game.white_clock = self.time_control.get_clock('w');
                                         return Some(res);
                                     } else {
                                         return None;
