@@ -45,6 +45,15 @@ impl LiveGames {
         return -3;
     }
 
+    pub fn resign(&mut self, id: &String, username: &String) -> bool {
+        let game = self.shuuro_games.get_mut(id);
+        if let Some(i) = game {
+            let r = i.resign(username);
+            return r;
+        }
+        return false;
+    }
+
     pub fn get_game(&mut self, id: String) -> Option<(String, ShuuroGame)> {
         let game = self.shuuro_games.get_mut(&id);
         match game {
@@ -462,6 +471,19 @@ impl ShuuroLive {
                 self.game.status = -2;
             }
         }
+    }
+
+    pub fn resign(&mut self, username: &String) -> bool {
+        let players = self.players();
+        if players.contains(username) {
+            let color = self.player_color(username);
+            self.game.status = 7;
+            self.game.result = color.to_string();
+            self.time_control.click(color);
+            self.game.last_clock = self.time_control.get_last_click();
+            return true;
+        }
+        false
     }
 
     fn player_color(&self, username: &String) -> Color {

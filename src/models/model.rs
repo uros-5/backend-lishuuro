@@ -445,7 +445,8 @@ fn date_str<S>(x: &OffsetDateTime, s: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
-    let date = &x.to_string()[..];
+    let date = x.to_string();
+    let date = date.split(" +").next().unwrap().clone();
     s.serialize_str(&date)
 }
 

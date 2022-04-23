@@ -161,7 +161,6 @@ impl Handler<RegularMessage> for Lobby {
                                         self.games.players(&m.game_id),
                                     );
                                     if status > &0 {
-                                        println!("{status}");
                                         self.games.remove_game(&m.game_id);
                                     }
                                     return ();
@@ -193,6 +192,18 @@ impl Handler<RegularMessage> for Lobby {
                                     return ();
                                 }
                                 return self.send_message_to_selected(res, users);
+                            }
+                        } else if t == "live_game_resign" {
+                            let m = serde_json::from_str::<GameGetConfirmed>(&msg.text);
+                            if let Ok(m) = m {
+                                let resign = self.games.resign(&m.game_id, &msg.player.username());
+                                if resign {
+                                    let users = self.games.players(&m.game_id);
+                                    res = serde_json::json!({"t": t, "resign": true, "player": &msg.player.username()});
+                                    self.games.remove_game(&m.game_id);
+                                    return self.send_message_to_selected(res, users);
+                                }
+                                return ();
                             }
                         } else if t == "home_chat_message" {
                             let m = serde_json::from_str::<ChatItem>(&msg.text);
@@ -317,7 +328,6 @@ impl Handler<Connect> for Lobby {
             None => {
                 let player = msg.player.clone();
                 self.active_players.insert(msg.player, msg.addr);
-                println!("{}", &player.username());
                 self.send_message(
                     &player.clone(),
                     serde_json::json!({"t": "connected","msg": "User connected"}),
