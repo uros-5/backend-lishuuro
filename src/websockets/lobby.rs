@@ -135,7 +135,11 @@ impl Handler<RegularMessage> for Lobby {
                                         placed.clone(),
                                         self.games.players(&m.game_id),
                                     );
-                                    if placed.get("first_move_error").unwrap() == &serde_json::json!(true) { self.games.remove_game(&m.game_id); }
+                                    if placed.get("first_move_error").unwrap()
+                                        == &serde_json::json!(true)
+                                    {
+                                        self.games.remove_game(&m.game_id);
+                                    }
                                     return ();
                                 }
                             }
@@ -151,16 +155,15 @@ impl Handler<RegularMessage> for Lobby {
                                     *played.get_mut("game_id").unwrap() =
                                         serde_json::json!(m.game_id);
                                     let status = &played["status"].as_i64().unwrap();
-                                   
 
                                     self.send_message_to_selected(
                                         played,
                                         self.games.players(&m.game_id),
                                     );
-                                     if status > &1 {
+                                    if status > &0 {
                                         println!("{status}");
                                         self.games.remove_game(&m.game_id);
-                                     }
+                                    }
                                     return ();
                                 }
                             }
@@ -175,6 +178,21 @@ impl Handler<RegularMessage> for Lobby {
                             if let Ok(m) = m {
                                 let confirmed = self.games.confirmed_players(&m.game_id);
                                 res = serde_json::json!({"t": t, "confirmed": &confirmed});
+                            }
+                        } else if t == "live_game_draw" {
+                            let m = serde_json::from_str::<GameGetConfirmed>(&msg.text);
+                            if let Ok(m) = m {
+                                let draw = self.games.draw_req(&m.game_id, &msg.player.username());
+                                let users = self.games.players(&m.game_id);
+                                if draw == 5 {
+                                    res = serde_json::json!({"t": t, "draw": true});
+                                    self.games.remove_game(&m.game_id);
+                                } else if draw == -2 {
+                                    res = serde_json::json!({"t": t, "draw": false, "player": &msg.player.username()});
+                                } else if draw == -3 {
+                                    return ();
+                                }
+                                return self.send_message_to_selected(res, users);
                             }
                         } else if t == "home_chat_message" {
                             let m = serde_json::from_str::<ChatItem>(&msg.text);

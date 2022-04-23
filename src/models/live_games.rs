@@ -29,6 +29,22 @@ impl LiveGames {
         self.shuuro_games.remove(id);
     }
 
+    pub fn draw_req(&mut self, id: &String, username: &String) -> i8 {
+        let game = self.shuuro_games.get_mut(id);
+        if let Some(i) = game {
+            let draw = i.game_draw(username);
+            if !i.draws.contains(&false) {
+                // both agree on draw
+                i.game.status = 5;
+                return 5;
+            } else if draw {
+                // one send draw request
+                return -2;
+            }
+        }
+        return -3;
+    }
+
     pub fn get_game(&mut self, id: String) -> Option<(String, ShuuroGame)> {
         let game = self.shuuro_games.get_mut(&id);
         match game {
@@ -152,6 +168,7 @@ pub struct ShuuroLive {
     pub fight: Position,
     pub running: bool,
     pub time_control: TimeControl,
+    pub draws: [bool; 2],
 }
 
 impl From<&ShuuroGame> for ShuuroLive {
@@ -163,6 +180,7 @@ impl From<&ShuuroGame> for ShuuroLive {
             fight: Position::default(),
             running: true,
             time_control: TimeControl::new(game.incr.whole_seconds(), game.min.whole_seconds()),
+            draws: [false, false],
         }
     }
 }
@@ -238,6 +256,7 @@ impl ShuuroLive {
                             let last_credit = self.shop.credit(*color);
                             if self.time_control.time_ok(&c) {
                                 self.shop.play(m);
+                                self.draws = [false, false];
                                 if last_credit != self.shop.credit(*color) {
                                     self.game.shop_history.push(
                                         self.shop.get_sfen_history(color).last().unwrap().clone(),
@@ -274,6 +293,17 @@ impl ShuuroLive {
         }
     }
 
+    pub fn game_draw(&mut self, username: &String) -> bool {
+        let player_color = self.player_color(username);
+        if player_color == Color::NoColor {
+            return false;
+        } else if self.draws[player_color.index()] {
+            return false;
+        }
+        self.draws[player_color.index()] = true;
+        true
+    }
+
     pub fn set_deploy(&mut self) {
         self.game.current_stage = String::from("deploy");
         self.time_control.update_stage(String::from("deploy"));
@@ -306,6 +336,7 @@ impl ShuuroLive {
                         } else if self.time_control.time_ok(&color.to_string()) {
                             if self.game.side_to_move == color.to_string() {
                                 self.deploy.place(piece, to);
+                                self.draws = [false, false];
                                 let ply_2 = self.deploy.ply();
                                 if ply_2 != ply {
                                     let m = self.deploy.get_sfen_history().last().unwrap().clone();
@@ -361,6 +392,7 @@ impl ShuuroLive {
                                         .fight
                                         .play(from.to_string().as_str(), to.to_string().as_str())
                                     {
+                                        self.draws = [false, false];
                                         let mut res = serde_json::json!({"t": "live_game_play",
                                         "game_move": game_move,
                                         "status": 0 as i64,
@@ -430,5 +462,14 @@ impl ShuuroLive {
                 self.game.status = -2;
             }
         }
+    }
+
+    fn player_color(&self, username: &String) -> Color {
+        if username == &self.game.white {
+            return Color::White;
+        } else if username == &self.game.black {
+            return Color::Black;
+        }
+        Color::NoColor
     }
 }
