@@ -9,9 +9,13 @@ use crate::models::model::{
 use actix::prelude::{Actor, Context, Handler, Recipient};
 use actix::AsyncContext;
 use actix::WrapFuture;
+use bson::{doc, oid::ObjectId};
+use futures::Future;
 use mongodb::Collection;
 use serde_json;
 use std::collections::HashMap;
+use std::pin::Pin;
+use std::str::FromStr;
 
 type Socket = Recipient<WsMessage>;
 
@@ -59,6 +63,23 @@ impl Lobby {
             }
         }
     }
+    pub fn update_entire_game(
+        &'static self,
+        id: &'_ String,
+        game: &'_ ShuuroGame,
+    ) -> impl Future<Output = ()> + 'static {
+        let filter = doc! {"_id": ObjectId::from_str(id.as_str()).unwrap()};
+        let update = doc! {"$set": bson::to_bson(&game).unwrap()};
+        let b = Box::pin(async move {
+            let game1 = self
+                .db_shuuro_games
+                .find_one_and_update(filter, update, None);
+            match game1.await {
+                _g => {}
+            };
+        });
+        b
+    }
 }
 
 impl Actor for Lobby {
@@ -85,7 +106,7 @@ impl Handler<RegularMessage> for Lobby {
                         } else if t == "live_game_start" {
                             let m = serde_json::from_str::<GameRequest>(&msg.text);
                             if let Ok(m) = m {
-                                let game = self.games.get_game(m.game_id);
+                                let game = self.games.get_game(&m.game_id);
                                 match game {
                                     Some(g) => {
                                         res = serde_json::json!({"t": "live_game_start", "game_id": &g.0.clone(), "game_info": &g.1});
@@ -138,6 +159,19 @@ impl Handler<RegularMessage> for Lobby {
                                     if placed.get("first_move_error").unwrap()
                                         == &serde_json::json!(true)
                                     {
+                                        let game = self.games.get_game(&m.game_id).unwrap().1;
+                                        let filter = doc! {"_id": ObjectId::from_str(&m.game_id.as_str()).unwrap()};
+                                        let update = doc! {"$set": bson::to_bson(&game).unwrap()};
+                                        let shuuro_games = self.db_shuuro_games.clone();
+                                        let b = Box::pin(async move {
+                                            let game1 = shuuro_games
+                                                .find_one_and_update(filter, update, None);
+                                            match game1.await {
+                                                _g => {}
+                                            };
+                                        });
+                                        let actor_future = b.into_actor(self);
+                                        ctx.spawn(actor_future);
                                         self.games.remove_game(&m.game_id);
                                     }
                                     return ();
@@ -161,6 +195,19 @@ impl Handler<RegularMessage> for Lobby {
                                         self.games.players(&m.game_id),
                                     );
                                     if status > &0 {
+                                        let game = self.games.get_game(&m.game_id).unwrap().1;
+                                        let filter = doc! {"_id": ObjectId::from_str(&m.game_id.as_str()).unwrap()};
+                                        let update = doc! {"$set": bson::to_bson(&game).unwrap()};
+                                        let shuuro_games = self.db_shuuro_games.clone();
+                                        let b = Box::pin(async move {
+                                            let game1 = shuuro_games
+                                                .find_one_and_update(filter, update, None);
+                                            match game1.await {
+                                                _g => {}
+                                            };
+                                        });
+                                        let actor_future = b.into_actor(self);
+                                        ctx.spawn(actor_future);
                                         self.games.remove_game(&m.game_id);
                                     }
                                     return ();
@@ -185,6 +232,19 @@ impl Handler<RegularMessage> for Lobby {
                                 let users = self.games.players(&m.game_id);
                                 if draw == 5 {
                                     res = serde_json::json!({"t": t, "draw": true});
+                                    let game = self.games.get_game(&m.game_id).unwrap().1;
+                                    let filter = doc! {"_id": ObjectId::from_str(&m.game_id.as_str()).unwrap()};
+                                    let update = doc! {"$set": bson::to_bson(&game).unwrap()};
+                                    let shuuro_games = self.db_shuuro_games.clone();
+                                    let b = Box::pin(async move {
+                                        let game1 =
+                                            shuuro_games.find_one_and_update(filter, update, None);
+                                        match game1.await {
+                                            _g => {}
+                                        };
+                                    });
+                                    let actor_future = b.into_actor(self);
+                                    ctx.spawn(actor_future);
                                     self.games.remove_game(&m.game_id);
                                 } else if draw == -2 {
                                     res = serde_json::json!({"t": t, "draw": false, "player": &msg.player.username()});
@@ -200,6 +260,19 @@ impl Handler<RegularMessage> for Lobby {
                                 if resign {
                                     let users = self.games.players(&m.game_id);
                                     res = serde_json::json!({"t": t, "resign": true, "player": &msg.player.username()});
+                                    let game = self.games.get_game(&m.game_id).unwrap().1;
+                                    let filter = doc! {"_id": ObjectId::from_str(&m.game_id.as_str()).unwrap()};
+                                    let update = doc! {"$set": bson::to_bson(&game).unwrap()};
+                                    let shuuro_games = self.db_shuuro_games.clone();
+                                    let b = Box::pin(async move {
+                                        let game1 =
+                                            shuuro_games.find_one_and_update(filter, update, None);
+                                        match game1.await {
+                                            _g => {}
+                                        };
+                                    });
+                                    let actor_future = b.into_actor(self);
+                                    ctx.spawn(actor_future);
                                     self.games.remove_game(&m.game_id);
                                     return self.send_message_to_selected(res, users);
                                 }

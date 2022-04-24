@@ -54,8 +54,8 @@ impl LiveGames {
         return false;
     }
 
-    pub fn get_game(&mut self, id: String) -> Option<(String, ShuuroGame)> {
-        let game = self.shuuro_games.get_mut(&id);
+    pub fn get_game(&mut self, id: &String) -> Option<(String, ShuuroGame)> {
+        let game = self.shuuro_games.get_mut(id);
         match game {
             Some(i) => {
                 i.format_res();
