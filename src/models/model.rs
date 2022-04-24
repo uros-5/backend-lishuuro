@@ -15,12 +15,17 @@ pub const DURATION_RANGE: [i64; 28] = [
 // APP MODELS
 pub struct AppState {
     pub users: Collection<User>,
+    pub news: Collection<NewsItem>,
     pub counter: u8,
 }
 
 impl AppState {
-    pub fn new(users: Collection<User>) -> Self {
-        AppState { users, counter: 0 }
+    pub fn new(users: Collection<User>, news: Collection<NewsItem>) -> Self {
+        AppState {
+            users,
+            news,
+            counter: 0,
+        }
     }
     pub fn update_counter(&mut self) {
         self.counter += 1
@@ -439,6 +444,17 @@ impl TimeControl {
     fn elapsed(&self) -> Duration {
         OffsetDateTime::now_utc() - self.last_click
     }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct NewsItem {
+    pub title: String,
+    pub user: String,
+    #[serde(serialize_with = "date_str")]
+    pub date: OffsetDateTime,
+    pub category: String,
+    pub text: String,
+    pub headline: String,
 }
 
 fn date_str<S>(x: &OffsetDateTime, s: S) -> Result<S::Ok, S::Error>

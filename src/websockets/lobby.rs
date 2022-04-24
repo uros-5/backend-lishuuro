@@ -4,17 +4,17 @@ use super::messages::{
 use crate::models::live_games::LiveGames;
 use crate::models::model::{
     ActivePlayer, ChatItem, GameGetConfirmed, GameGetHand, GameMove, GameRequest, LobbyGame,
-    LobbyGames, ShuuroGame, User,
+    LobbyGames, NewsItem, ShuuroGame, User,
 };
 use actix::prelude::{Actor, Context, Handler, Recipient};
 use actix::AsyncContext;
 use actix::WrapFuture;
 use bson::{doc, oid::ObjectId};
+use futures::stream::TryStreamExt;
 use futures::Future;
 use mongodb::Collection;
 use serde_json;
 use std::collections::HashMap;
-use std::pin::Pin;
 use std::str::FromStr;
 
 type Socket = Recipient<WsMessage>;
@@ -27,11 +27,16 @@ pub struct Lobby {
     pub lobby: LobbyGames,
     pub db_users: Collection<User>,
     pub db_shuuro_games: Collection<ShuuroGame>,
+    pub news: Collection<NewsItem>,
     pub counter: i32,
 }
 
 impl Lobby {
-    pub fn new(db_users: Collection<User>, db_shuuro_games: Collection<ShuuroGame>) -> Self {
+    pub fn new(
+        db_users: Collection<User>,
+        db_shuuro_games: Collection<ShuuroGame>,
+        news: Collection<NewsItem>,
+    ) -> Self {
         Lobby {
             chat: vec![],
             active_players: HashMap::new(),
@@ -39,6 +44,7 @@ impl Lobby {
             lobby: LobbyGames::default(),
             db_users,
             db_shuuro_games,
+            news,
             counter: 0,
         }
     }
@@ -103,6 +109,20 @@ impl Handler<RegularMessage> for Lobby {
                             res = serde_json::json!({"t": t, "cnt": self.active_players.len()});
                         } else if t == "active_games_count" {
                             res = serde_json::json!({"t": t, "cnt": self.games.shuuro_games.len()});
+                        } else if t == "home_news" {
+                            let ctx2 = ctx.address().clone();
+                            let news = self.news;
+                            let b = Box::pin(async move {
+                                let all = news.find(doc! {}, None).await;
+                                if let Ok(mut c) = all {
+                                    //let mut news_ = Vec::<NewsItem>::new();
+                                    while let Some(n) = c.try_next().await? {
+                                        println!("{}", n.user);
+                                    }
+                                }
+                            });
+                            let actor_future = b.into_actor(self);
+                            ctx.spawn(actor_future);
                         } else if t == "live_game_start" {
                             let m = serde_json::from_str::<GameRequest>(&msg.text);
                             if let Ok(m) = m {
@@ -281,9 +301,21 @@ impl Handler<RegularMessage> for Lobby {
                         } else if t == "home_chat_message" {
                             let m = serde_json::from_str::<ChatItem>(&msg.text);
                             if let Ok(mut m) = m {
+                                let count = self.chat.iter().fold(0, |mut acc, x| {
+                                    if &x.user == &msg.player.username() {
+                                        acc += 1;
+                                    }
+                                    acc
+                                });
+
+                                if !&msg.player.reg() {
+                                    return ();
+                                } else if count == 5 {
+                                    return ();
+                                }
+
                                 m.update(&msg.player.username());
                                 if m.message.len() > 0 && m.message.len() < 50 {
-                                    // checks also if he posted
                                     res = m.response();
                                     self.chat.push(m);
                                     return self.send_message_to_all(res);

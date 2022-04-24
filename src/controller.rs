@@ -77,6 +77,27 @@ pub async fn vue_user(_session: Session) -> impl Responder {
     web::Json(json!( { "logged": logged, "username": username } ))
 }
 
+pub async fn news(
+    _session: Session,
+    app_data: web::Data<Mutex<AppState>>,
+    path: web::Path<String>,
+) -> impl Responder {
+    let app_data = app_data.lock().unwrap();
+    let item = app_data
+        .news
+        .find_one(doc! {"title": path.as_str()}, None)
+        .await;
+    match item {
+        Ok(i) => {
+            if let Some(news) = i {
+                return web::Json(json!({"exist": true, "news": news}));
+            }
+        }
+        Err(_e) => (),
+    }
+    web::Json(json!({"exist": false}))
+}
+
 pub async fn test(session: Session) -> impl Responder {
     let now = OffsetDateTime::now_utc();
     web::Json(json!({ "d": now.to_string()}))
