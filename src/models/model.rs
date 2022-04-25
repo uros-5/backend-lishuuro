@@ -1,9 +1,11 @@
+use bson::{doc, oid::ObjectId};
 use json_value_merge::Merge;
 use mongodb::Collection;
 use rand::prelude::*;
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{json, Value};
 use shuuro::{Color, Position, Shop};
+use std::time::Duration as StdD;
 use time::{Duration, OffsetDateTime};
 
 pub const VARIANTS: [&str; 1] = ["shuuro12"];
@@ -16,14 +18,20 @@ pub const DURATION_RANGE: [i64; 28] = [
 pub struct AppState {
     pub users: Collection<User>,
     pub news: Collection<NewsItem>,
+    pub games: Collection<ShuuroGame>,
     pub counter: u8,
 }
 
 impl AppState {
-    pub fn new(users: Collection<User>, news: Collection<NewsItem>) -> Self {
+    pub fn new(
+        users: Collection<User>,
+        news: Collection<NewsItem>,
+        games: Collection<ShuuroGame>,
+    ) -> Self {
         AppState {
             users,
             news,
+            games,
             counter: 0,
         }
     }
@@ -40,6 +48,7 @@ pub struct User {
     pub active: bool,
     pub currently_playing: bool,
     pub created_at: String,
+    pub last_games: Vec<String>,
 }
 
 impl User {
@@ -50,6 +59,7 @@ impl User {
             active: true,
             currently_playing: false,
             created_at: String::from(""),
+            last_games: vec![],
         }
     }
 
@@ -64,17 +74,22 @@ impl User {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShuuroGame {
     #[serde(serialize_with = "duration_i32")]
+    #[serde(skip_deserializing)]
     pub min: Duration,
+    #[serde(skip_deserializing)]
     #[serde(serialize_with = "duration_i32")]
     pub incr: Duration,
     pub white: String,
     pub black: String,
     pub side_to_move: String,
     #[serde(serialize_with = "duration_i32")]
+    #[serde(skip_deserializing)]
     pub white_clock: Duration,
     #[serde(serialize_with = "duration_i32")]
+    #[serde(skip_deserializing)]
     pub black_clock: Duration,
     #[serde(serialize_with = "date_str")]
+    #[serde(deserialize_with = "str_date")]
     pub last_clock: OffsetDateTime,
     pub current_stage: String,
     pub result: String,
@@ -448,10 +463,10 @@ impl TimeControl {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct NewsItem {
+    pub _id: ObjectId,
     pub title: String,
     pub user: String,
-    #[serde(serialize_with = "date_str")]
-    pub date: OffsetDateTime,
+    pub date: String,
     pub category: String,
     pub text: String,
     pub headline: String,
@@ -466,10 +481,34 @@ where
     s.serialize_str(&date)
 }
 
+fn str_date<'de, D>(data: D) -> Result<OffsetDateTime, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s: &str = Deserialize::deserialize(data)?;
+    let format = "%F %T";
+    match OffsetDateTime::parse(s, format) {
+        Ok(i) => {
+            return Ok(i);
+        }
+        Err(_) => {
+            return Ok(OffsetDateTime::now_utc());
+        }
+    }
+}
+
 fn duration_i32<S>(x: &Duration, s: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
     let duration = x.whole_milliseconds() as i64;
     s.serialize_i64(duration)
+}
+
+fn i32_duration<'de, D>(data: u64) -> Result<Duration, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let d2 = StdD::from_millis(data);
+    Ok(Duration::new(d2.as_secs() as i64, d2.as_nanos() as i32))
 }

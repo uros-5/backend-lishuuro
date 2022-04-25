@@ -1,6 +1,6 @@
 use actix::prelude::{Message, Recipient};
 
-use crate::models::model::{ActivePlayer, ShuuroGame};
+use crate::models::model::{ActivePlayer, NewsItem, ShuuroGame};
 
 #[derive(Message)]
 #[rtype(result = "()")]
@@ -47,6 +47,10 @@ pub enum GameMessageType {
         users: [String; 2],
         shuuro_game: ShuuroGame,
     },
+    News {
+        news: Vec<NewsItem>,
+        active_player: ActivePlayer,
+    },
 }
 
 impl GameMessageType {
@@ -59,6 +63,13 @@ impl GameMessageType {
             game_id,
             users,
             shuuro_game,
+        }
+    }
+
+    pub fn news(active_player: ActivePlayer, news: Vec<NewsItem>) -> GameMessageType {
+        GameMessageType::News {
+            news,
+            active_player,
         }
     }
 }

@@ -10,7 +10,7 @@ use time::Duration;
 use actix_cors::Cors;
 use actix_redis::RedisSession;
 use actix_web::{web, App, HttpServer};
-use controller::{callback, login, news, test, vue_user};
+use controller::{callback, login, news, test, user_games, vue_user};
 
 use models::model::{AppState, NewsItem};
 use mongodb::{options::ClientOptions, Client};
@@ -35,13 +35,14 @@ async fn main() -> std::io::Result<()> {
     let db = client.database("lishuuro");
     let users = db.collection::<User>("users");
     let shuuro_games = db.collection::<ShuuroGame>("shuuroGames");
-    let news = db.collection::<NewsItem>("news");
-    let lobby = Lobby::new(users, shuuro_games, news).start();
+    let news_ = db.collection::<NewsItem>("news");
+    let lobby = Lobby::new(users, shuuro_games, news_).start();
     HttpServer::new(move || {
         let users = db.collection::<User>("users");
         let news_items = db.collection::<NewsItem>("news");
+        let shuuro_games = db.collection::<ShuuroGame>("shuuroGames");
         App::new()
-            .data(Mutex::new(AppState::new(users, news_items)))
+            .data(Mutex::new(AppState::new(users, news_items, shuuro_games)))
             .data(lobby.clone())
             .wrap(
                 RedisSession::new("127.0.0.1:6379", &PRIVATE_KEY)
@@ -53,6 +54,7 @@ async fn main() -> std::io::Result<()> {
             .route("/vue_user", web::get().to(vue_user))
             .route("/test", web::get().to(test))
             .route("/news/{id}", web::get().to(news))
+            .route("/games/{username}", web::get().to(user_games))
             .service(start_connection)
     })
     .bind(("127.0.0.1", 8080))?

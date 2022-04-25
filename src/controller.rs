@@ -3,6 +3,7 @@ use std::{sync::Mutex, time::Duration};
 use actix_session::Session;
 use actix_web::{http, web, HttpRequest, HttpResponse, Responder};
 use bson::doc;
+use futures::TryStreamExt;
 use itertools::Itertools;
 use querystring::querify;
 use serde::{Deserialize, Serialize};
@@ -82,6 +83,7 @@ pub async fn news(
     app_data: web::Data<Mutex<AppState>>,
     path: web::Path<String>,
 ) -> impl Responder {
+    println!("{}", path.as_str());
     let app_data = app_data.lock().unwrap();
     let item = app_data
         .news
@@ -93,7 +95,47 @@ pub async fn news(
                 return web::Json(json!({"exist": true, "news": news}));
             }
         }
-        Err(_e) => (),
+        Err(_e) => {
+            println!("{}", _e);
+        }
+    }
+    web::Json(json!({"exist": false}))
+}
+
+pub async fn user_games(
+    app_data: web::Data<Mutex<AppState>>,
+    path: web::Path<String>,
+) -> impl Responder {
+    let app_data = app_data.lock().unwrap();
+    let item = app_data
+        .games
+        .find(
+            doc! {"$or": [{"white": path.as_str()}, {"black": path.as_str()}]},
+            None,
+        )
+        .await;
+    match item {
+        Ok(mut c) => {
+            let mut count = 0;
+            let mut games = vec![];
+
+            while let Ok(g) = c.try_next().await {
+                match g {
+                    Some(g) => {
+                        games.push(g);
+                        if count < 6 {
+                            count += 1;
+                        }
+                    }
+                    None => {
+                        break;
+                    }
+                }
+            }
+
+            return web::Json(json!({"exist": true, "games": games}));
+        }
+        Err(_e) => {}
     }
     web::Json(json!({"exist": false}))
 }

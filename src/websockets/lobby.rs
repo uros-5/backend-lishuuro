@@ -111,14 +111,17 @@ impl Handler<RegularMessage> for Lobby {
                             res = serde_json::json!({"t": t, "cnt": self.games.shuuro_games.len()});
                         } else if t == "home_news" {
                             let ctx2 = ctx.address().clone();
-                            let news = self.news;
+                            let news = self.news.clone();
+                            let active_player = msg.player.clone();
                             let b = Box::pin(async move {
                                 let all = news.find(doc! {}, None).await;
-                                if let Ok(mut c) = all {
-                                    //let mut news_ = Vec::<NewsItem>::new();
-                                    while let Some(n) = c.try_next().await? {
-                                        println!("{}", n.user);
-                                    }
+                                if let Ok(c) = all {
+                                    let news_: Vec<NewsItem> =
+                                        c.try_collect().await.unwrap_or_else(|_| vec![]);
+                                    ctx2.do_send(GameMessage {
+                                        message_type: GameMessageType::news(active_player, news_),
+                                    });
+                                    //ctx2.send_message(&msg.player, res)
                                 }
                             });
                             let actor_future = b.into_actor(self);
@@ -193,6 +196,8 @@ impl Handler<RegularMessage> for Lobby {
                                         let actor_future = b.into_actor(self);
                                         ctx.spawn(actor_future);
                                         self.games.remove_game(&m.game_id);
+                                        res = serde_json::json!({"t": "active_games_count", "cnt": self.games.shuuro_games.len()});
+                                        return self.send_message_to_all(res);
                                     }
                                     return ();
                                 }
@@ -229,6 +234,8 @@ impl Handler<RegularMessage> for Lobby {
                                         let actor_future = b.into_actor(self);
                                         ctx.spawn(actor_future);
                                         self.games.remove_game(&m.game_id);
+                                        res = serde_json::json!({"t": "active_games_count", "cnt": self.games.shuuro_games.len()});
+                                        return self.send_message_to_all(res);
                                     }
                                     return ();
                                 }
@@ -252,6 +259,7 @@ impl Handler<RegularMessage> for Lobby {
                                 let users = self.games.players(&m.game_id);
                                 if draw == 5 {
                                     res = serde_json::json!({"t": t, "draw": true});
+                                    self.send_message_to_selected(res, users);
                                     let game = self.games.get_game(&m.game_id).unwrap().1;
                                     let filter = doc! {"_id": ObjectId::from_str(&m.game_id.as_str()).unwrap()};
                                     let update = doc! {"$set": bson::to_bson(&game).unwrap()};
@@ -266,6 +274,8 @@ impl Handler<RegularMessage> for Lobby {
                                     let actor_future = b.into_actor(self);
                                     ctx.spawn(actor_future);
                                     self.games.remove_game(&m.game_id);
+                                    res = serde_json::json!({"t": "active_games_count", "cnt": self.games.shuuro_games.len()});
+                                    return self.send_message_to_all(res);
                                 } else if draw == -2 {
                                     res = serde_json::json!({"t": t, "draw": false, "player": &msg.player.username()});
                                 } else if draw == -3 {
@@ -280,6 +290,7 @@ impl Handler<RegularMessage> for Lobby {
                                 if resign {
                                     let users = self.games.players(&m.game_id);
                                     res = serde_json::json!({"t": t, "resign": true, "player": &msg.player.username()});
+                                    self.send_message_to_selected(res, users);
                                     let game = self.games.get_game(&m.game_id).unwrap().1;
                                     let filter = doc! {"_id": ObjectId::from_str(&m.game_id.as_str()).unwrap()};
                                     let update = doc! {"$set": bson::to_bson(&game).unwrap()};
@@ -294,7 +305,8 @@ impl Handler<RegularMessage> for Lobby {
                                     let actor_future = b.into_actor(self);
                                     ctx.spawn(actor_future);
                                     self.games.remove_game(&m.game_id);
-                                    return self.send_message_to_selected(res, users);
+                                    res = serde_json::json!({"t": "active_games_count", "cnt": self.games.shuuro_games.len()});
+                                    return self.send_message_to_all(res);
                                 }
                                 return ();
                             }
@@ -489,6 +501,13 @@ impl Handler<GameMessage> for Lobby {
                 self.send_message_to_selected(res, users);
                 let res = serde_json::json!({"t": "active_games_count", "cnt": self.games.shuuro_games.len()});
                 self.send_message_to_all(res);
+            }
+            GameMessageType::News {
+                news,
+                active_player,
+            } => {
+                let res = serde_json::json!({"t": "home_news", "news": news });
+                self.send_message(&active_player, res);
             }
         }
     }
