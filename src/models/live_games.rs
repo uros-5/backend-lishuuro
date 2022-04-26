@@ -58,7 +58,7 @@ impl LiveGames {
         let game = self.shuuro_games.get_mut(id);
         match game {
             Some(i) => {
-                i.format_res();
+                
                 return Some((String::from(id), i.game.clone()));
             }
             None => None,
@@ -197,8 +197,6 @@ impl From<&ShuuroGame> for ShuuroLive {
 impl ShuuroLive {
     pub fn format_res(&mut self) {
         self.game.last_clock = self.time_control.get_last_click();
-        self.game.status = -2;
-        self.game.result = String::from("*");
     }
 
     pub fn can_add(&self, username: &String) -> bool {

@@ -86,6 +86,17 @@ impl Lobby {
         });
         b
     }
+
+    fn update_spectator(&mut self, player: &ActivePlayer, watches: &str) {
+        let key = self.active_players.get_key_value(player);
+        if let Some(p) = key {
+            let s = p.1.clone();
+            let mut new_player = player.clone();
+            new_player.update_watches(watches);
+            self.active_players.remove(player);
+            self.active_players.insert(new_player, s);
+        }
+    }
 }
 
 impl Actor for Lobby {
@@ -108,6 +119,7 @@ impl Handler<RegularMessage> for Lobby {
                         } else if t == "active_players_count" {
                             res = serde_json::json!({"t": t, "cnt": self.active_players.len()});
                         } else if t == "active_games_count" {
+                            println!("{}", &msg.player.watches());
                             res = serde_json::json!({"t": t, "cnt": self.games.shuuro_games.len()});
                         } else if t == "home_news" {
                             let ctx2 = ctx.address().clone();
@@ -293,6 +305,7 @@ impl Handler<RegularMessage> for Lobby {
                                     self.send_message_to_selected(res, users);
                                     let game = self.games.get_game(&m.game_id).unwrap().1;
                                     let filter = doc! {"_id": ObjectId::from_str(&m.game_id.as_str()).unwrap()};
+                                    println!("{}", &game.status);
                                     let update = doc! {"$set": bson::to_bson(&game).unwrap()};
                                     let shuuro_games = self.db_shuuro_games.clone();
                                     let b = Box::pin(async move {
@@ -494,8 +507,9 @@ impl Handler<GameMessage> for Lobby {
             GameMessageType::AddingGame {
                 game_id,
                 users,
-                shuuro_game,
+                mut shuuro_game,
             } => {
+                shuuro_game.game_id = ObjectId::parse_str(&game_id).unwrap();
                 let res = serde_json::json!({"t": "live_game_start", "game_id": game_id, "game_info": &shuuro_game });
                 self.games.add_game(game_id.clone(), &shuuro_game);
                 self.send_message_to_selected(res, users);

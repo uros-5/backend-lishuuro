@@ -73,20 +73,21 @@ impl User {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShuuroGame {
+    pub game_id: ObjectId,
     #[serde(serialize_with = "duration_i32")]
-    #[serde(skip_deserializing)]
+    #[serde(deserialize_with = "i32_duration")]
     pub min: Duration,
-    #[serde(skip_deserializing)]
     #[serde(serialize_with = "duration_i32")]
+    #[serde(deserialize_with = "i32_duration")]
     pub incr: Duration,
     pub white: String,
     pub black: String,
     pub side_to_move: String,
     #[serde(serialize_with = "duration_i32")]
-    #[serde(skip_deserializing)]
+    #[serde(deserialize_with = "i32_duration")]
     pub white_clock: Duration,
     #[serde(serialize_with = "duration_i32")]
-    #[serde(skip_deserializing)]
+    #[serde(deserialize_with = "i32_duration")]
     pub black_clock: Duration,
     #[serde(serialize_with = "date_str")]
     #[serde(deserialize_with = "str_date")]
@@ -107,6 +108,7 @@ pub struct ShuuroGame {
 impl Default for ShuuroGame {
     fn default() -> Self {
         Self {
+            game_id: ObjectId::new(),
             min: Duration::default(),
             incr: Duration::default(),
             white: String::from(""),
@@ -195,6 +197,7 @@ impl ChatItem {
 pub struct ActivePlayer {
     reg: bool,
     username: String,
+    watches: String,
 }
 
 impl ActivePlayer {
@@ -202,6 +205,7 @@ impl ActivePlayer {
         ActivePlayer {
             reg: *reg,
             username: username.clone(),
+            watches: String::from(""),
         }
     }
     pub fn username(&self) -> String {
@@ -209,6 +213,12 @@ impl ActivePlayer {
     }
     pub fn reg(&self) -> bool {
         self.reg.clone()
+    }
+    pub fn watches(&self) -> String {
+        self.watches.clone()
+    }
+    pub fn update_watches(&mut self, watches: &str) {
+        self.watches = String::from(watches);
     }
 }
 
@@ -501,14 +511,15 @@ fn duration_i32<S>(x: &Duration, s: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
-    let duration = x.whole_milliseconds() as i64;
-    s.serialize_i64(duration)
+    let duration = x.whole_milliseconds() as u64;
+    s.serialize_u64(duration)
 }
 
-fn i32_duration<'de, D>(data: u64) -> Result<Duration, D::Error>
+fn i32_duration<'de, D>(data: D) -> Result<Duration, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let d2 = StdD::from_millis(data);
+    let s: u64 = Deserialize::deserialize(data)?;
+    let d2 = StdD::from_millis(s);
     Ok(Duration::new(d2.as_secs() as i64, d2.as_nanos() as i32))
 }
