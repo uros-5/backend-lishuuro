@@ -23,6 +23,7 @@ type Socket = Recipient<WsMessage>;
 pub struct Lobby {
     pub chat: Vec<ChatItem>,
     pub active_players: HashMap<ActivePlayer, Socket>,
+    pub spectators: HashMap<String, String>,
     pub games: LiveGames,
     pub lobby: LobbyGames,
     pub db_users: Collection<User>,
@@ -45,6 +46,7 @@ impl Lobby {
             db_users,
             db_shuuro_games,
             news,
+            spectators: HashMap::new(),
             counter: 0,
         }
     }
@@ -62,13 +64,39 @@ impl Lobby {
         }
     }
 
-    pub fn send_message_to_selected(&self, message: serde_json::Value, users: [String; 2]) {
-        for user in self.active_players.iter() {
-            if users.contains(&&user.0.username()) {
-                user.1.do_send(WsMessage(message.to_owned().to_string()));
+    pub fn send_message_to_spectators(&self, game_id: &String, message: serde_json::Value) {
+        if let Some(spectators) = self.games.spectators(game_id) {
+            let mut users = vec![];
+            let mut counter = 0;
+            for i in spectators.iter() {
+                let user = i.as_str();
+                users.push(user);
+            }
+            for i in self.active_players.iter() {
+                if users.contains(&i.0.username().as_str()) {
+                    counter += 1;
+                    i.1.do_send(WsMessage(message.to_owned().to_string()));
+                    if counter == users.len() {
+                        break;
+                    }
+                }
             }
         }
     }
+
+    pub fn send_message_to_selected(&self, message: serde_json::Value, users: [String; 2]) {
+        let mut counter = 0;
+        for user in self.active_players.iter() {
+            if users.contains(&&user.0.username()) {
+                user.1.do_send(WsMessage(message.to_owned().to_string()));
+                counter += 1;
+                if counter == 2 {
+                    break;
+                }
+            }
+        }
+    }
+
     pub fn update_entire_game(
         &'static self,
         id: &'_ String,
@@ -87,15 +115,18 @@ impl Lobby {
         b
     }
 
-    fn update_spectator(&mut self, player: &ActivePlayer, watches: &str) {
-        let key = self.active_players.get_key_value(player);
-        if let Some(p) = key {
-            let s = p.1.clone();
-            let mut new_player = player.clone();
-            new_player.update_watches(watches);
-            self.active_players.remove(player);
-            self.active_players.insert(new_player, s);
+    pub fn add_spectator(&mut self, username: &str, game_id: &str) {
+        self.spectators
+            .insert(String::from(username), String::from(game_id));
+    }
+
+    pub fn remove_spectator(&mut self, username: &str) -> (bool, usize) {
+        if let Some(game_id) = self.spectators.remove(&String::from(username)) {
+            if game_id != String::from("") {
+                return (true, self.games.remove_spectator(&game_id, username));
+            }
         }
+        (false, 0)
     }
 }
 
@@ -119,7 +150,6 @@ impl Handler<RegularMessage> for Lobby {
                         } else if t == "active_players_count" {
                             res = serde_json::json!({"t": t, "cnt": self.active_players.len()});
                         } else if t == "active_games_count" {
-                            println!("{}", &msg.player.watches());
                             res = serde_json::json!({"t": t, "cnt": self.games.shuuro_games.len()});
                         } else if t == "home_news" {
                             let ctx2 = ctx.address().clone();
@@ -145,6 +175,13 @@ impl Handler<RegularMessage> for Lobby {
                                 match game {
                                     Some(g) => {
                                         res = serde_json::json!({"t": "live_game_start", "game_id": &g.0.clone(), "game_info": &g.1});
+                                        let spectators = self
+                                            .games
+                                            .add_spectator(&g.0, &msg.player.username().as_str());
+                                        self.add_spectator(
+                                            &msg.player.username().as_str(),
+                                            &g.0.as_str(),
+                                        );
                                     }
                                     None => (),
                                 }
@@ -158,20 +195,13 @@ impl Handler<RegularMessage> for Lobby {
                                 if !self.games.confirmed_players(&m.game_id).contains(&false) {
                                     res = self.games.set_deploy(&m.game_id);
                                     let res2 = serde_json::json!({"t": "pause_confirmed", "confirmed": &self.games.confirmed_players(&m.game_id)});
-                                    self.send_message_to_selected(
-                                        res2,
-                                        self.games.players(&m.game_id),
-                                    );
-                                    return self.send_message_to_selected(
-                                        res,
-                                        self.games.players(&m.game_id),
-                                    );
+                                    self.send_message_to_spectators(&m.game_id, res2);
+                                    self.send_message_to_spectators(&m.game_id, res);
+                                    return ();
                                 } else if t == "live_game_confirm" {
                                     res = serde_json::json!({"t": "pause_confirmed", "confirmed": &self.games.confirmed_players(&m.game_id)});
-                                    return self.send_message_to_selected(
-                                        res,
-                                        self.games.players(&m.game_id),
-                                    );
+
+                                    self.send_message_to_spectators(&m.game_id, res.clone());
                                 } else {
                                     return ();
                                 }
@@ -187,10 +217,8 @@ impl Handler<RegularMessage> for Lobby {
                                 if let Some(mut placed) = placed {
                                     *placed.get_mut("game_id").unwrap() =
                                         serde_json::json!(m.game_id);
-                                    self.send_message_to_selected(
-                                        placed.clone(),
-                                        self.games.players(&m.game_id),
-                                    );
+
+                                    self.send_message_to_spectators(&m.game_id, placed.clone());
                                     if placed.get("first_move_error").unwrap()
                                         == &serde_json::json!(true)
                                     {
@@ -227,10 +255,7 @@ impl Handler<RegularMessage> for Lobby {
                                         serde_json::json!(m.game_id);
                                     let status = &played["status"].as_i64().unwrap();
 
-                                    self.send_message_to_selected(
-                                        played,
-                                        self.games.players(&m.game_id),
-                                    );
+                                    self.send_message_to_spectators(&m.game_id, played);
                                     if status > &0 {
                                         let game = self.games.get_game(&m.game_id).unwrap().1;
                                         let filter = doc! {"_id": ObjectId::from_str(&m.game_id.as_str()).unwrap()};
@@ -268,10 +293,9 @@ impl Handler<RegularMessage> for Lobby {
                             let m = serde_json::from_str::<GameGetConfirmed>(&msg.text);
                             if let Ok(m) = m {
                                 let draw = self.games.draw_req(&m.game_id, &msg.player.username());
-                                let users = self.games.players(&m.game_id);
                                 if draw == 5 {
                                     res = serde_json::json!({"t": t, "draw": true});
-                                    self.send_message_to_selected(res, users);
+                                    self.send_message_to_spectators(&m.game_id, res);
                                     let game = self.games.get_game(&m.game_id).unwrap().1;
                                     let filter = doc! {"_id": ObjectId::from_str(&m.game_id.as_str()).unwrap()};
                                     let update = doc! {"$set": bson::to_bson(&game).unwrap()};
@@ -293,19 +317,17 @@ impl Handler<RegularMessage> for Lobby {
                                 } else if draw == -3 {
                                     return ();
                                 }
-                                return self.send_message_to_selected(res, users);
+                                return self.send_message_to_spectators(&m.game_id, res);
                             }
                         } else if t == "live_game_resign" {
                             let m = serde_json::from_str::<GameGetConfirmed>(&msg.text);
                             if let Ok(m) = m {
                                 let resign = self.games.resign(&m.game_id, &msg.player.username());
                                 if resign {
-                                    let users = self.games.players(&m.game_id);
                                     res = serde_json::json!({"t": t, "resign": true, "player": &msg.player.username()});
-                                    self.send_message_to_selected(res, users);
+                                    self.send_message_to_spectators(&m.game_id, res);
                                     let game = self.games.get_game(&m.game_id).unwrap().1;
                                     let filter = doc! {"_id": ObjectId::from_str(&m.game_id.as_str()).unwrap()};
-                                    println!("{}", &game.status);
                                     let update = doc! {"$set": bson::to_bson(&game).unwrap()};
                                     let shuuro_games = self.db_shuuro_games.clone();
                                     let b = Box::pin(async move {
@@ -493,6 +515,9 @@ impl Handler<Disconnect> for Lobby {
             serde_json::json!({"t": "active_games_count", "cnt": self.games.shuuro_games.len()});
         let temp_res = serde_json::json!({"t": "home_lobby_remove_user",
                                                 "username": &msg.player.username()});
+        //abcd
+        let spectator = self.remove_spectator(&msg.player.username().as_str());
+        println!("{:?}", spectator);
         self.send_message_to_all(temp_res);
         self.send_message_to_all(player_count);
         self.send_message_to_all(matches_count);
@@ -510,6 +535,8 @@ impl Handler<GameMessage> for Lobby {
                 mut shuuro_game,
             } => {
                 shuuro_game.game_id = ObjectId::parse_str(&game_id).unwrap();
+                self.add_spectator(users[0].as_str(), game_id.as_str());
+                self.add_spectator(users[1].as_str(), game_id.as_str());
                 let res = serde_json::json!({"t": "live_game_start", "game_id": game_id, "game_info": &shuuro_game });
                 self.games.add_game(game_id.clone(), &shuuro_game);
                 self.send_message_to_selected(res, users);

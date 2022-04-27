@@ -197,7 +197,6 @@ impl ChatItem {
 pub struct ActivePlayer {
     reg: bool,
     username: String,
-    watches: String,
 }
 
 impl ActivePlayer {
@@ -205,7 +204,6 @@ impl ActivePlayer {
         ActivePlayer {
             reg: *reg,
             username: username.clone(),
-            watches: String::from(""),
         }
     }
     pub fn username(&self) -> String {
@@ -213,12 +211,6 @@ impl ActivePlayer {
     }
     pub fn reg(&self) -> bool {
         self.reg.clone()
-    }
-    pub fn watches(&self) -> String {
-        self.watches.clone()
-    }
-    pub fn update_watches(&mut self, watches: &str) {
-        self.watches = String::from(watches);
     }
 }
 

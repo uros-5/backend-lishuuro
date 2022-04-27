@@ -2,7 +2,7 @@ use serde_json::Value;
 use shuuro::{init, position::Outcome, Color, Move, PieceType, Position, Shop};
 
 use crate::models::model::ShuuroGame;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use super::model::TimeControl;
 
@@ -22,7 +22,12 @@ impl LiveGames {
     }
 
     pub fn add_game(&mut self, id: String, game: &ShuuroGame) {
-        self.shuuro_games.insert(id, ShuuroLive::from(game));
+        self.shuuro_games.insert(id.clone(), ShuuroLive::from(game));
+
+        if let Some(mut g) = self.shuuro_games.get_mut(&id) {
+            g.add_spectator(game.white.as_str());
+            g.add_spectator(game.black.as_str());
+        }
     }
 
     pub fn remove_game(&mut self, id: &String) {
@@ -58,11 +63,17 @@ impl LiveGames {
         let game = self.shuuro_games.get_mut(id);
         match game {
             Some(i) => {
-                
                 return Some((String::from(id), i.game.clone()));
             }
             None => None,
         }
+    }
+
+    pub fn spectators(&self, id: &String) -> Option<&HashSet<String>> {
+        if let Some(g) = self.shuuro_games.get(id) {
+            return Some(g.spectators());
+        }
+        None
     }
 
     pub fn stop(&mut self, id: String) {
@@ -110,6 +121,22 @@ impl LiveGames {
             }
         }
         None
+    }
+
+    pub fn add_spectator(&mut self, id: &String, username: &str) -> usize {
+        let game = self.shuuro_games.get_mut(id);
+        if let Some(game) = game {
+            return game.add_spectator(username);
+        }
+        0
+    }
+
+    pub fn remove_spectator(&mut self, id: &String, username: &str) -> usize {
+        let game = self.shuuro_games.get_mut(id);
+        if let Some(game) = game {
+            return game.remove_spectator(username);
+        }
+        0
     }
 
     pub fn players(&self, game_id: &String) -> [String; 2] {
@@ -178,6 +205,7 @@ pub struct ShuuroLive {
     pub running: bool,
     pub time_control: TimeControl,
     pub draws: [bool; 2],
+    pub spectators: HashSet<String>,
 }
 
 impl From<&ShuuroGame> for ShuuroLive {
@@ -190,6 +218,7 @@ impl From<&ShuuroGame> for ShuuroLive {
             running: true,
             time_control: TimeControl::new(game.incr.whole_seconds(), game.min.whole_seconds()),
             draws: [false, false],
+            spectators: HashSet::new(),
         }
     }
 }
@@ -208,6 +237,21 @@ impl ShuuroLive {
 
     pub fn players(&self) -> [String; 2] {
         [self.game.white.clone(), self.game.black.clone()]
+    }
+
+    pub fn spectators(&self) -> &HashSet<String> {
+        &self.spectators
+    }
+
+    pub fn add_spectator(&mut self, username: &str) -> usize {
+        self.spectators.insert(String::from(username));
+        self.spectators.len()
+    }
+
+    pub fn remove_spectator(&mut self, username: &str) -> usize {
+        println!("{}", &self.spectators().len());
+        self.spectators.remove(&String::from(username));
+        self.spectators.len()
     }
 
     pub fn confirmed_players(&self) -> [bool; 2] {
