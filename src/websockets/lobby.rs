@@ -186,6 +186,15 @@ impl Handler<RegularMessage> for Lobby {
                                     None => (),
                                 }
                             }
+                        } else if t == "live_game_sfen" {
+                            let m = serde_json::from_str::<GameGetConfirmed>(&msg.text);
+                            if let Ok(m) = m {
+                                if let Some(g) = self.games.get_game(&m.game_id) { 
+                                    if &g.1.current_stage != &"shop" {
+                                        res = serde_json::json!({"t": t, "game_id": &g.0.clone(), "fen": g.1.sfen, "current_stage": &g.1.current_stage })
+                                    }
+                                }
+                            }
                         } else if t == "live_game_buy" || t == "live_game_confirm" {
                             let m = serde_json::from_str::<GameMove>(&msg.text);
                             if let Ok(m) = m {
@@ -517,7 +526,6 @@ impl Handler<Disconnect> for Lobby {
                                                 "username": &msg.player.username()});
         //abcd
         let spectator = self.remove_spectator(&msg.player.username().as_str());
-        println!("{:?}", spectator);
         self.send_message_to_all(temp_res);
         self.send_message_to_all(player_count);
         self.send_message_to_all(matches_count);
@@ -534,7 +542,7 @@ impl Handler<GameMessage> for Lobby {
                 users,
                 mut shuuro_game,
             } => {
-                shuuro_game.game_id = ObjectId::parse_str(&game_id).unwrap();
+                shuuro_game.game_id = game_id.clone(); 
                 self.add_spectator(users[0].as_str(), game_id.as_str());
                 self.add_spectator(users[1].as_str(), game_id.as_str());
                 let res = serde_json::json!({"t": "live_game_start", "game_id": game_id, "game_info": &shuuro_game });

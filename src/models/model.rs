@@ -73,7 +73,8 @@ impl User {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShuuroGame {
-    pub game_id: ObjectId,
+    pub _id: ObjectId,
+    pub game_id: String,
     #[serde(serialize_with = "duration_i32")]
     #[serde(deserialize_with = "i32_duration")]
     pub min: Duration,
@@ -108,7 +109,8 @@ pub struct ShuuroGame {
 impl Default for ShuuroGame {
     fn default() -> Self {
         Self {
-            game_id: ObjectId::new(),
+            _id: ObjectId::new(),
+            game_id: String::from(""), 
             min: Duration::default(),
             incr: Duration::default(),
             white: String::from(""),
