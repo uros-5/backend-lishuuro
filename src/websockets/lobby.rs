@@ -123,7 +123,10 @@ impl Lobby {
     pub fn remove_spectator(&mut self, username: &str) -> (bool, usize) {
         if let Some(game_id) = self.spectators.remove(&String::from(username)) {
             if game_id != String::from("") {
-                return (true, self.games.remove_spectator(&game_id, username));
+                let count = self.games.remove_spectator(&game_id, username);
+                let msg = serde_json::json!({"t": "live_game_spectators_count", "game_id": &game_id, "count": count});
+                self.send_message_to_spectators(&game_id, msg);
+                return (true, count);
             }
         }
         (false, 0)
@@ -151,6 +154,18 @@ impl Handler<RegularMessage> for Lobby {
                             res = serde_json::json!({"t": t, "cnt": self.active_players.len()});
                         } else if t == "active_games_count" {
                             res = serde_json::json!({"t": t, "cnt": self.games.shuuro_games.len()});
+                        } else if t == "live_game_remove_spectator" {
+                            let m = serde_json::from_str::<GameGetConfirmed>(&msg.text);
+                            if let Ok(m) = m {
+                                self.remove_spectator(&msg.player.username());
+                                let count = self
+                                    .games
+                                    .remove_spectator(&m.game_id, &msg.player.username());
+                                let res = serde_json::json!({"t": "live_game_spectators_count",
+                                    "game_id": &m.game_id,
+                                    "count": count});
+                                return self.send_message_to_spectators(&m.game_id, res);
+                            }
                         } else if t == "home_news" {
                             let ctx2 = ctx.address().clone();
                             let news = self.news.clone();
@@ -182,6 +197,9 @@ impl Handler<RegularMessage> for Lobby {
                                             &msg.player.username().as_str(),
                                             &g.0.as_str(),
                                         );
+                                        self.send_message(&msg.player, res);
+                                        let res_s = serde_json::json!({"t": "live_game_spectators_count", "game_id": &m.game_id, "count": spectators});
+                                        return self.send_message_to_spectators(&m.game_id, res_s);
                                     }
                                     None => {
                                         let filter =

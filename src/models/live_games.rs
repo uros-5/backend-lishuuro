@@ -254,7 +254,6 @@ impl ShuuroLive {
     }
 
     pub fn remove_spectator(&mut self, username: &str) -> usize {
-        println!("{}", &self.spectators().len());
         self.spectators.remove(&String::from(username));
         self.spectators.len()
     }
@@ -524,9 +523,7 @@ impl ShuuroLive {
         let filter = doc! {"_id": ObjectId::from_str(self.game.game_id.as_str()).unwrap()};
         let update = doc! {"$set": { "current_stage": bson::to_bson(&current_stage).unwrap()}};
 
-        col 
-            .find_one_and_update(filter, update, None);
-        
+        col.find_one_and_update(filter, update, None);
     }
 
     pub fn resign(&mut self, username: &String) -> bool {

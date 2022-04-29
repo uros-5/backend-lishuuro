@@ -83,7 +83,6 @@ pub async fn news(
     app_data: web::Data<Mutex<AppState>>,
     path: web::Path<String>,
 ) -> impl Responder {
-    println!("{}", path.as_str());
     let app_data = app_data.lock().unwrap();
     let item = app_data
         .news
