@@ -1,8 +1,13 @@
+use bson::{bson, doc, oid::ObjectId};
+use mongodb::Collection;
 use serde_json::Value;
 use shuuro::{init, position::Outcome, Color, Move, PieceType, Position, Shop};
 
 use crate::models::model::ShuuroGame;
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    str::FromStr,
+};
 
 use super::model::TimeControl;
 
@@ -175,7 +180,7 @@ impl LiveGames {
                 g.game.side_to_move = g.deploy.side_to_move().to_string();
                 g.game.last_clock = g.time_control.get_last_click();
                 return serde_json::json!({"t": "redirect_deploy",
-                    "path": format!("/shuuro/deploy/{}", game_id),
+                    "path": format!("/shuuro/1/{}", game_id),
                     "hand":g.get_hand(&String::from("")),
                     "last_clock": g.time_control.get_last_click().to_string(),
                     "side_to_move": "w",
@@ -356,7 +361,7 @@ impl ShuuroLive {
     }
 
     pub fn set_deploy(&mut self) {
-        self.game.current_stage = 1; 
+        self.game.current_stage = 1;
         self.time_control.update_stage(1);
         self.load_shop_hand();
         self.deploy.generate_plinths();
@@ -513,6 +518,15 @@ impl ShuuroLive {
                 self.game.status = -2;
             }
         }
+    }
+
+    pub fn update_stage_db(&self, current_stage: u8, col: &Collection<ShuuroGame>) {
+        let filter = doc! {"_id": ObjectId::from_str(self.game.game_id.as_str()).unwrap()};
+        let update = doc! {"$set": { "current_stage": bson::to_bson(&current_stage).unwrap()}};
+
+        col 
+            .find_one_and_update(filter, update, None);
+        
     }
 
     pub fn resign(&mut self, username: &String) -> bool {

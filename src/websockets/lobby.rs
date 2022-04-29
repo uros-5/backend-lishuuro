@@ -183,13 +183,32 @@ impl Handler<RegularMessage> for Lobby {
                                             &g.0.as_str(),
                                         );
                                     }
-                                    None => (),
+                                    None => {
+                                        let filter =
+                                            doc! {"_id": ObjectId::from_str(&m.game_id).unwrap()};
+                                        let db = self.db_shuuro_games.clone();
+                                        let self2 = self.clone();
+
+                                        let b = Box::pin(async move {
+                                            let game = db.find_one(filter, None);
+                                            if let Ok(g) = game.await {
+                                                if let Some(g) = g {
+                                                    let res = serde_json::json!({"t": "live_game_start", "game_id": &m.game_id, "game_info": &g.clone()});
+
+                                                    self2.send_message(&msg.player, res);
+                                                }
+                                            }
+                                        });
+                                        let actor_future = b.into_actor(self);
+                                        ctx.spawn(actor_future);
+                                        return ();
+                                    }
                                 }
                             }
                         } else if t == "live_game_sfen" {
                             let m = serde_json::from_str::<GameGetConfirmed>(&msg.text);
                             if let Ok(m) = m {
-                                if let Some(g) = self.games.get_game(&m.game_id) { 
+                                if let Some(g) = self.games.get_game(&m.game_id) {
                                     if &g.1.current_stage != &0 {
                                         res = serde_json::json!({"t": t, "game_id": &g.0.clone(), "fen": g.1.sfen, "current_stage": &g.1.current_stage })
                                     }
@@ -206,6 +225,22 @@ impl Handler<RegularMessage> for Lobby {
                                     let res2 = serde_json::json!({"t": "pause_confirmed", "confirmed": &self.games.confirmed_players(&m.game_id)});
                                     self.send_message_to_spectators(&m.game_id, res2);
                                     self.send_message_to_spectators(&m.game_id, res);
+                                    {
+                                        let filter =
+                                            doc! {"_id": ObjectId::from_str(&m.game_id).unwrap()};
+                                        let update = doc! {"$set": { "current_stage": bson::to_bson(&1).unwrap()}};
+                                        let shuuro_games = self.db_shuuro_games.clone();
+
+                                        let b = Box::pin(async move {
+                                            let game1 = shuuro_games
+                                                .find_one_and_update(filter, update, None);
+                                            match game1.await {
+                                                _g => {}
+                                            };
+                                        });
+                                        let actor_future = b.into_actor(self);
+                                        ctx.spawn(actor_future);
+                                    }
                                     return ();
                                 } else if t == "live_game_confirm" {
                                     res = serde_json::json!({"t": "pause_confirmed", "confirmed": &self.games.confirmed_players(&m.game_id)});
@@ -542,7 +577,7 @@ impl Handler<GameMessage> for Lobby {
                 users,
                 mut shuuro_game,
             } => {
-                shuuro_game.game_id = game_id.clone(); 
+                shuuro_game.game_id = game_id.clone();
                 self.add_spectator(users[0].as_str(), game_id.as_str());
                 self.add_spectator(users[1].as_str(), game_id.as_str());
                 let res = serde_json::json!({"t": "live_game_start", "game_id": game_id, "game_info": &shuuro_game });
