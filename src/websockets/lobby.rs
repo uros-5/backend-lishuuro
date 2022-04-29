@@ -190,7 +190,7 @@ impl Handler<RegularMessage> for Lobby {
                             let m = serde_json::from_str::<GameGetConfirmed>(&msg.text);
                             if let Ok(m) = m {
                                 if let Some(g) = self.games.get_game(&m.game_id) { 
-                                    if &g.1.current_stage != &"shop" {
+                                    if &g.1.current_stage != &0 {
                                         res = serde_json::json!({"t": t, "game_id": &g.0.clone(), "fen": g.1.sfen, "current_stage": &g.1.current_stage })
                                     }
                                 }

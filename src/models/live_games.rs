@@ -272,7 +272,7 @@ impl ShuuroLive {
 
     pub fn get_hand(&self, username: &String) -> String {
         let color = &self.game.user_color(username);
-        if self.game.current_stage == "deploy" {
+        if self.game.current_stage == 1 {
             return format!(
                 "{}{}",
                 &self.deploy.get_hand(Color::Black),
@@ -280,17 +280,17 @@ impl ShuuroLive {
             );
         }
 
-        if *color == Color::NoColor && self.game.current_stage == "shop" {
+        if *color == Color::NoColor && self.game.current_stage == 0 {
             return String::from("");
         }
-        if self.game.current_stage == "shop" || self.game.current_stage == "deploy" {
+        if self.game.current_stage == 0 || self.game.current_stage == 1 {
             return self.shop.to_sfen(*color);
         }
         return String::from("");
     }
 
     pub fn buy(&mut self, game_move: String, username: &String) {
-        if &self.game.current_stage == &String::from("shop") {
+        if &self.game.current_stage == &0 {
             if &game_move.len() == &2 {
                 let color = &self.game.user_color(username);
                 if *color == Color::NoColor {
@@ -356,16 +356,16 @@ impl ShuuroLive {
     }
 
     pub fn set_deploy(&mut self) {
-        self.game.current_stage = String::from("deploy");
-        self.time_control.update_stage(String::from("deploy"));
+        self.game.current_stage = 1; 
+        self.time_control.update_stage(1);
         self.load_shop_hand();
         self.deploy.generate_plinths();
         self.game.sfen = self.deploy.to_sfen();
     }
 
     pub fn set_fight(&mut self, color: Color) -> bool {
-        self.game.current_stage = String::from("fight");
-        self.time_control.update_stage(String::from("fight"));
+        self.game.current_stage = 2;
+        self.time_control.update_stage(2);
         self.time_control.click(color);
         self.game.last_clock = self.time_control.get_last_click();
         let sfen = self.deploy.generate_sfen();
@@ -374,7 +374,7 @@ impl ShuuroLive {
     }
 
     pub fn place(&mut self, game_move: String, username: &String) -> Option<Value> {
-        if self.game.current_stage == "deploy" {
+        if self.game.current_stage == 1 {
             if let Some(m) = Move::from_sfen(game_move.as_str()) {
                 match m {
                     Move::Put { to, piece } => {
@@ -425,7 +425,7 @@ impl ShuuroLive {
     }
 
     pub fn play(&mut self, game_move: String, username: &String) -> Option<Value> {
-        if self.game.current_stage == "fight" {
+        if self.game.current_stage == 2 {
             if let Some(m) = Move::from_sfen(game_move.as_str()) {
                 match m {
                     Move::Normal {

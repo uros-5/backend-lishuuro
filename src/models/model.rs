@@ -93,7 +93,7 @@ pub struct ShuuroGame {
     #[serde(serialize_with = "date_str")]
     #[serde(deserialize_with = "str_date")]
     pub last_clock: OffsetDateTime,
-    pub current_stage: String,
+    pub current_stage: u8,
     pub result: String,
     pub status: i32,
     pub shop_history: Vec<(String, u8)>,
@@ -119,7 +119,7 @@ impl Default for ShuuroGame {
             white_clock: Duration::default(),
             black_clock: Duration::default(),
             last_clock: OffsetDateTime::now_utc(),
-            current_stage: String::from("shop"),
+            current_stage: 0, 
             result: String::from(""),
             status: -2,
             shop_history: Vec::new(),
@@ -391,7 +391,7 @@ pub struct TimeControl {
     black_player: Duration,
     #[serde(serialize_with = "duration_i32")]
     white_player: Duration,
-    stage: String,
+    stage: u8,
 }
 
 impl TimeControl {
@@ -401,11 +401,11 @@ impl TimeControl {
             inc: Duration::new(inc, 0),
             black_player: Duration::new(duration, 0),
             white_player: Duration::new(duration, 0),
-            stage: String::from("shop"),
+            stage: 0 
         }
     }
 
-    pub fn update_stage(&mut self, stage: String) {
+    pub fn update_stage(&mut self, stage: u8) {
         self.stage = stage;
         self.last_click = OffsetDateTime::now_utc();
     }
@@ -420,14 +420,14 @@ impl TimeControl {
             self.black_player -= elapsed;
             self.black_player += self.inc;
         }
-        if self.stage != "shop" {
+        if self.stage != 0 {
             self.last_click = OffsetDateTime::now_utc();
         }
         self.time_ok(&c)
     }
 
     pub fn time_ok(&self, c: &String) -> bool {
-        if self.stage == String::from("shop") {
+        if self.stage == 0 {
             return (self.white_player - self.elapsed()).whole_milliseconds() > 0;
         }
         if c == "w" {
