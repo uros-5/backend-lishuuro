@@ -313,9 +313,11 @@ impl ShuuroLive {
                                 self.shop.play(m);
                                 self.draws = [false, false];
                                 if last_credit != self.shop.credit(*color) {
+                                    /*
                                     self.game.shop_history.push(
                                         self.shop.get_sfen_history(color).last().unwrap().clone(),
                                     );
+                                    */
                                 }
                             }
                             match color {

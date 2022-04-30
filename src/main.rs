@@ -16,13 +16,11 @@ use models::model::{AppState, NewsItem};
 use mongodb::{options::ClientOptions, Client};
 
 use models::model::{ShuuroGame, User};
+use models::p_key::read_key;
+
 use websockets::{lobby::Lobby, start_connection::start_connection};
 
 use actix::prelude::Actor;
-
-const PRIVATE_KEY: [u8; 32] = [
-    5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
-];
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -45,7 +43,7 @@ async fn main() -> std::io::Result<()> {
             .data(Mutex::new(AppState::new(users, news_items, shuuro_games)))
             .data(lobby.clone())
             .wrap(
-                RedisSession::new("127.0.0.1:6379", &PRIVATE_KEY)
+                RedisSession::new("127.0.0.1:6379", &read_key())
                     .cookie_max_age(Some(Duration::days(365))),
             )
             .wrap(get_cors())
