@@ -133,11 +133,11 @@ impl Handler<RegularMessage> for Lobby {
                 let data_type = &i["t"];
                 match data_type {
                     serde_json::Value::String(t) => {
-                        if t == "home_chat_full" {
+                        if t == "live_chat_full" {
                             let m = serde_json::from_str::<GameGetConfirmed>(&msg.text);
                             if let Ok(m) = m {
                                 if let Some(chat) = self.chat2.chat(&m.game_id) {
-                                    res = serde_json::json!({"t": t, "lines": chat});
+                                    res = serde_json::json!({"t": t, "id": &m.game_id, "lines": chat});
                                     return self.send_message(&msg.player, res);
                                 }
                             }
@@ -332,13 +332,17 @@ impl Handler<RegularMessage> for Lobby {
                                 }
                                 return ();
                             }
-                        } else if t == "home_chat_message" {
+                        } else if t == "live_chat_message" {
                             let m = serde_json::from_str::<ChatItem>(&msg.text);
                             if let Ok(mut m) = m {
                                 if let Some(res) =
                                     self.chat2.add_msg(&m.id.clone(), &mut m, &msg.player)
                                 {
-                                    return self.send_message_to_spectators(&m.id.clone(), res);
+                                    if &m.id == "home" {
+                                        return self.send_message_to_all(res);
+                                    } else {
+                                        return self.send_message_to_spectators(&m.id.clone(), res);
+                                    }
                                 }
                             }
                             return ();
@@ -441,7 +445,7 @@ impl Handler<Connect> for Lobby {
         for player in self.active_players.iter() {
             self.send_message(
                 &player.0.clone(),
-                serde_json::json!({"t": "home_chat_full", "lines": self.chat}),
+                serde_json::json!({"t": "live_chat_full", "id": "home", "lines": self.chat2.chat(&String::from("home")).unwrap()}),
             );
             self.send_message(
                 &player.0.clone(),
@@ -467,7 +471,6 @@ impl Handler<Disconnect> for Lobby {
             serde_json::json!({"t": "active_games_count", "cnt": self.games.shuuro_games.len()});
         let temp_res = serde_json::json!({"t": "home_lobby_remove_user",
                                                 "username": &msg.player.username()});
-        //abcd
         let spectator = self.remove_spectator(&msg.player.username().as_str());
         self.send_message_to_all(temp_res);
         self.send_message_to_all(player_count);
@@ -493,6 +496,7 @@ impl Handler<GameMessage> for Lobby {
                 self.send_message_to_selected(res, users);
                 let res = serde_json::json!({"t": "active_games_count", "cnt": self.games.shuuro_games.len()});
                 self.send_message_to_all(res);
+                self.chat2.add_room(game_id);
             }
             GameMessageType::News {
                 news,

@@ -1,15 +1,10 @@
 use bson::{doc, oid::ObjectId};
 use json_value_merge::Merge;
 use mongodb::Collection;
-use rand::prelude::*;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{json, Value};
-use shuuro::{Color, Position, Shop};
-use std::{
-    borrow::Borrow,
-    collections::{HashMap, HashSet},
-    time::Duration as StdD,
-};
+use shuuro::Color;
+use std::{collections::HashMap, time::Duration as StdD};
 use time::{Duration, OffsetDateTime};
 
 pub const VARIANTS: [&str; 1] = ["shuuro12"];
@@ -38,9 +33,6 @@ impl AppState {
             games,
             counter: 0,
         }
-    }
-    pub fn update_counter(&mut self) {
-        self.counter += 1
     }
 }
 
@@ -195,7 +187,7 @@ impl ChatItem {
 
     pub fn response(&mut self) -> Value {
         let mut first = serde_json::json!(&mut self.clone());
-        let second = json!({ "t": "home_chat_message" });
+        let second = json!({ "t": "live_chat_message" });
         first.merge(second);
         first
     }
@@ -209,7 +201,7 @@ pub struct ChatRooms {
 impl ChatRooms {
     pub fn new() -> Self {
         let mut rooms = HashMap::default();
-        rooms.insert(String::from("homeChat"), vec![]);
+        rooms.insert(String::from("home"), vec![]);
         let room = ChatRooms { rooms };
         room
     }
@@ -263,6 +255,10 @@ impl ChatRooms {
             return Some(chat);
         }
         None
+    }
+
+    pub fn add_room(&mut self, id: String) {
+        self.rooms.insert(id, vec![]);
     }
 }
 
