@@ -5,7 +5,11 @@ use rand::prelude::*;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{json, Value};
 use shuuro::{Color, Position, Shop};
-use std::time::Duration as StdD;
+use std::{
+    borrow::Borrow,
+    collections::{HashMap, HashSet},
+    time::Duration as StdD,
+};
 use time::{Duration, OffsetDateTime};
 
 pub const VARIANTS: [&str; 1] = ["shuuro12"];
@@ -110,7 +114,7 @@ impl Default for ShuuroGame {
     fn default() -> Self {
         Self {
             _id: ObjectId::new(),
-            game_id: String::from(""), 
+            game_id: String::from(""),
             min: Duration::default(),
             incr: Duration::default(),
             white: String::from(""),
@@ -119,7 +123,7 @@ impl Default for ShuuroGame {
             white_clock: Duration::default(),
             black_clock: Duration::default(),
             last_clock: OffsetDateTime::now_utc(),
-            current_stage: 0, 
+            current_stage: 0,
             result: String::from(""),
             status: -2,
             shop_history: Vec::new(),
@@ -164,6 +168,7 @@ impl From<&LobbyGame> for ShuuroGame {
 // WebSockets
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ChatItem {
+    pub id: String,
     pub user: String,
     pub time: String,
     pub message: String,
@@ -173,6 +178,7 @@ impl ChatItem {
     pub fn new(user: &String, message: &String) -> Self {
         let now = OffsetDateTime::now_utc();
         ChatItem {
+            id: String::from(""),
             user: user.clone(),
             message: message.clone(),
             time: format!("{}:{}", now.hour(), now.minute()),
@@ -192,6 +198,71 @@ impl ChatItem {
         let second = json!({ "t": "home_chat_message" });
         first.merge(second);
         first
+    }
+}
+
+#[derive(Clone)]
+pub struct ChatRooms {
+    rooms: HashMap<String, Vec<ChatItem>>,
+}
+
+impl ChatRooms {
+    pub fn new() -> Self {
+        let mut rooms = HashMap::default();
+        rooms.insert(String::from("homeChat"), vec![]);
+        let room = ChatRooms { rooms };
+        room
+    }
+
+    pub fn can_add(chat: &Vec<ChatItem>, player: &ActivePlayer) -> bool {
+        let count = chat.iter().fold(0, |mut acc, x| {
+            if &x.user == &player.username() {
+                acc += 1;
+            }
+            acc
+        });
+
+        if !&player.reg() {
+            return false;
+        } else if count == 5 {
+            return false;
+        }
+
+        true
+    }
+
+    pub fn message_length(m: &ChatItem) -> bool {
+        if m.message.len() > 0 && m.message.len() < 50 {
+            return true;
+        }
+        false
+    }
+
+    pub fn add_msg(
+        &mut self,
+        id: &String,
+        m: &mut ChatItem,
+        player: &ActivePlayer,
+    ) -> Option<Value> {
+        if let Some(chat) = self.rooms.get_mut(id) {
+            if ChatRooms::message_length(&m) {
+                if ChatRooms::can_add(&chat, &player) {
+                    m.update(&player.username());
+                    let res = m.response();
+                    chat.push(m.clone());
+                    return Some(res);
+                    //return self.send_message_to_all(res);
+                }
+            }
+        }
+        None
+    }
+
+    pub fn chat(&self, id: &String) -> Option<&Vec<ChatItem>> {
+        if let Some(chat) = self.rooms.get(id) {
+            return Some(chat);
+        }
+        None
     }
 }
 
@@ -401,7 +472,7 @@ impl TimeControl {
             inc: Duration::new(inc, 0),
             black_player: Duration::new(duration, 0),
             white_player: Duration::new(duration, 0),
-            stage: 0 
+            stage: 0,
         }
     }
 

@@ -1,10 +1,11 @@
 use super::messages::{
     Connect, Disconnect, GameMessage, GameMessageType, RegularMessage, WsMessage,
 };
+use crate::models::db_work::*;
 use crate::models::live_games::LiveGames;
 use crate::models::model::{
-    ActivePlayer, ChatItem, GameGetConfirmed, GameGetHand, GameMove, GameRequest, LobbyGame,
-    LobbyGames, NewsItem, ShuuroGame, User,
+    ActivePlayer, ChatItem, ChatRooms, GameGetConfirmed, GameGetHand, GameMove, GameRequest,
+    LobbyGame, LobbyGames, NewsItem, ShuuroGame, User,
 };
 use actix::prelude::{Actor, Context, Handler, Recipient};
 use actix::AsyncContext;
@@ -22,6 +23,7 @@ type Socket = Recipient<WsMessage>;
 #[derive(Clone)]
 pub struct Lobby {
     pub chat: Vec<ChatItem>,
+    pub chat2: ChatRooms,
     pub active_players: HashMap<ActivePlayer, Socket>,
     pub spectators: HashMap<String, String>,
     pub games: LiveGames,
@@ -40,6 +42,7 @@ impl Lobby {
     ) -> Self {
         Lobby {
             chat: vec![],
+            chat2: ChatRooms::new(),
             active_players: HashMap::new(),
             games: LiveGames::default(),
             lobby: LobbyGames::default(),
@@ -97,24 +100,6 @@ impl Lobby {
         }
     }
 
-    pub fn update_entire_game(
-        &'static self,
-        id: &'_ String,
-        game: &'_ ShuuroGame,
-    ) -> impl Future<Output = ()> + 'static {
-        let filter = doc! {"_id": ObjectId::from_str(id.as_str()).unwrap()};
-        let update = doc! {"$set": bson::to_bson(&game).unwrap()};
-        let b = Box::pin(async move {
-            let game1 = self
-                .db_shuuro_games
-                .find_one_and_update(filter, update, None);
-            match game1.await {
-                _g => {}
-            };
-        });
-        b
-    }
-
     pub fn add_spectator(&mut self, username: &str, game_id: &str) {
         self.spectators
             .insert(String::from(username), String::from(game_id));
@@ -149,7 +134,13 @@ impl Handler<RegularMessage> for Lobby {
                 match data_type {
                     serde_json::Value::String(t) => {
                         if t == "home_chat_full" {
-                            res = serde_json::json!({"t": t, "lines": self.chat});
+                            let m = serde_json::from_str::<GameGetConfirmed>(&msg.text);
+                            if let Ok(m) = m {
+                                if let Some(chat) = self.chat2.chat(&m.game_id) {
+                                    res = serde_json::json!({"t": t, "lines": chat});
+                                    return self.send_message(&msg.player, res);
+                                }
+                            }
                         } else if t == "active_players_count" {
                             res = serde_json::json!({"t": t, "cnt": self.active_players.len()});
                         } else if t == "active_games_count" {
@@ -167,20 +158,7 @@ impl Handler<RegularMessage> for Lobby {
                                 return self.send_message_to_spectators(&m.game_id, res);
                             }
                         } else if t == "home_news" {
-                            let ctx2 = ctx.address().clone();
-                            let news = self.news.clone();
-                            let active_player = msg.player.clone();
-                            let b = Box::pin(async move {
-                                let all = news.find(doc! {}, None).await;
-                                if let Ok(c) = all {
-                                    let news_: Vec<NewsItem> =
-                                        c.try_collect().await.unwrap_or_else(|_| vec![]);
-                                    ctx2.do_send(GameMessage {
-                                        message_type: GameMessageType::news(active_player, news_),
-                                    });
-                                    //ctx2.send_message(&msg.player, res)
-                                }
-                            });
+                            let b = get_home_news(&ctx, &self.news, &msg.player);
                             let actor_future = b.into_actor(self);
                             ctx.spawn(actor_future);
                         } else if t == "live_game_start" {
@@ -206,7 +184,6 @@ impl Handler<RegularMessage> for Lobby {
                                             doc! {"_id": ObjectId::from_str(&m.game_id).unwrap()};
                                         let db = self.db_shuuro_games.clone();
                                         let self2 = self.clone();
-
                                         let b = Box::pin(async move {
                                             let game = db.find_one(filter, None);
                                             if let Ok(g) = game.await {
@@ -243,22 +220,6 @@ impl Handler<RegularMessage> for Lobby {
                                     let res2 = serde_json::json!({"t": "pause_confirmed", "confirmed": &self.games.confirmed_players(&m.game_id)});
                                     self.send_message_to_spectators(&m.game_id, res2);
                                     self.send_message_to_spectators(&m.game_id, res);
-                                    {
-                                        let filter =
-                                            doc! {"_id": ObjectId::from_str(&m.game_id).unwrap()};
-                                        let update = doc! {"$set": { "current_stage": bson::to_bson(&1).unwrap()}};
-                                        let shuuro_games = self.db_shuuro_games.clone();
-
-                                        let b = Box::pin(async move {
-                                            let game1 = shuuro_games
-                                                .find_one_and_update(filter, update, None);
-                                            match game1.await {
-                                                _g => {}
-                                            };
-                                        });
-                                        let actor_future = b.into_actor(self);
-                                        ctx.spawn(actor_future);
-                                    }
                                     return ();
                                 } else if t == "live_game_confirm" {
                                     res = serde_json::json!({"t": "pause_confirmed", "confirmed": &self.games.confirmed_players(&m.game_id)});
@@ -285,16 +246,7 @@ impl Handler<RegularMessage> for Lobby {
                                         == &serde_json::json!(true)
                                     {
                                         let game = self.games.get_game(&m.game_id).unwrap().1;
-                                        let filter = doc! {"_id": ObjectId::from_str(&m.game_id.as_str()).unwrap()};
-                                        let update = doc! {"$set": bson::to_bson(&game).unwrap()};
-                                        let shuuro_games = self.db_shuuro_games.clone();
-                                        let b = Box::pin(async move {
-                                            let game1 = shuuro_games
-                                                .find_one_and_update(filter, update, None);
-                                            match game1.await {
-                                                _g => {}
-                                            };
-                                        });
+                                        let b = update_entire_game(&self, &m.game_id, &game);
                                         let actor_future = b.into_actor(self);
                                         ctx.spawn(actor_future);
                                         self.games.remove_game(&m.game_id);
@@ -320,16 +272,7 @@ impl Handler<RegularMessage> for Lobby {
                                     self.send_message_to_spectators(&m.game_id, played);
                                     if status > &0 {
                                         let game = self.games.get_game(&m.game_id).unwrap().1;
-                                        let filter = doc! {"_id": ObjectId::from_str(&m.game_id.as_str()).unwrap()};
-                                        let update = doc! {"$set": bson::to_bson(&game).unwrap()};
-                                        let shuuro_games = self.db_shuuro_games.clone();
-                                        let b = Box::pin(async move {
-                                            let game1 = shuuro_games
-                                                .find_one_and_update(filter, update, None);
-                                            match game1.await {
-                                                _g => {}
-                                            };
-                                        });
+                                        let b = update_entire_game(&self, &m.game_id, &game);
                                         let actor_future = b.into_actor(self);
                                         ctx.spawn(actor_future);
                                         self.games.remove_game(&m.game_id);
@@ -359,16 +302,7 @@ impl Handler<RegularMessage> for Lobby {
                                     res = serde_json::json!({"t": t, "draw": true});
                                     self.send_message_to_spectators(&m.game_id, res);
                                     let game = self.games.get_game(&m.game_id).unwrap().1;
-                                    let filter = doc! {"_id": ObjectId::from_str(&m.game_id.as_str()).unwrap()};
-                                    let update = doc! {"$set": bson::to_bson(&game).unwrap()};
-                                    let shuuro_games = self.db_shuuro_games.clone();
-                                    let b = Box::pin(async move {
-                                        let game1 =
-                                            shuuro_games.find_one_and_update(filter, update, None);
-                                        match game1.await {
-                                            _g => {}
-                                        };
-                                    });
+                                    let b = update_entire_game(&self, &m.game_id, &game);
                                     let actor_future = b.into_actor(self);
                                     ctx.spawn(actor_future);
                                     self.games.remove_game(&m.game_id);
@@ -389,16 +323,7 @@ impl Handler<RegularMessage> for Lobby {
                                     res = serde_json::json!({"t": t, "resign": true, "player": &msg.player.username()});
                                     self.send_message_to_spectators(&m.game_id, res);
                                     let game = self.games.get_game(&m.game_id).unwrap().1;
-                                    let filter = doc! {"_id": ObjectId::from_str(&m.game_id.as_str()).unwrap()};
-                                    let update = doc! {"$set": bson::to_bson(&game).unwrap()};
-                                    let shuuro_games = self.db_shuuro_games.clone();
-                                    let b = Box::pin(async move {
-                                        let game1 =
-                                            shuuro_games.find_one_and_update(filter, update, None);
-                                        match game1.await {
-                                            _g => {}
-                                        };
-                                    });
+                                    let b = update_entire_game(&self, &m.game_id, &game);
                                     let actor_future = b.into_actor(self);
                                     ctx.spawn(actor_future);
                                     self.games.remove_game(&m.game_id);
@@ -410,26 +335,13 @@ impl Handler<RegularMessage> for Lobby {
                         } else if t == "home_chat_message" {
                             let m = serde_json::from_str::<ChatItem>(&msg.text);
                             if let Ok(mut m) = m {
-                                let count = self.chat.iter().fold(0, |mut acc, x| {
-                                    if &x.user == &msg.player.username() {
-                                        acc += 1;
-                                    }
-                                    acc
-                                });
-
-                                if !&msg.player.reg() {
-                                    return ();
-                                } else if count == 5 {
-                                    return ();
-                                }
-
-                                m.update(&msg.player.username());
-                                if m.message.len() > 0 && m.message.len() < 50 {
-                                    res = m.response();
-                                    self.chat.push(m);
-                                    return self.send_message_to_all(res);
+                                if let Some(res) =
+                                    self.chat2.add_msg(&m.id.clone(), &mut m, &msg.player)
+                                {
+                                    return self.send_message_to_spectators(&m.id.clone(), res);
                                 }
                             }
+                            return ();
                         } else if t == "home_lobby_full" {
                             res = self.lobby.response()
                         } else if t == "just_stop" {
@@ -483,29 +395,7 @@ impl Handler<RegularMessage> for Lobby {
                                             self.send_message_to_all(temp_res);
                                         }
                                         let db_shuuro_games = self.db_shuuro_games.clone();
-                                        self.counter += 1;
-                                        let ctx2 = ctx.address().clone();
-                                        let b = Box::pin(async move {
-                                            let game_added =
-                                                db_shuuro_games.insert_one(&shuuro_game, None);
-                                            match game_added.await {
-                                                g => {
-                                                    let id =
-                                                        g.ok().unwrap().inserted_id.to_string();
-                                                    let game_id = id
-                                                        .replace("ObjectId(\"", "")
-                                                        .replace("\")", "");
-                                                    ctx2.do_send(GameMessage {
-                                                        message_type:
-                                                            GameMessageType::new_adding_game(
-                                                                game_id,
-                                                                users,
-                                                                shuuro_game,
-                                                            ),
-                                                    });
-                                                }
-                                            }
-                                        });
+                                        let b = new_game(&ctx, db_shuuro_games, users, shuuro_game);
                                         let actor_future = b.into_actor(self);
                                         ctx.spawn(actor_future);
                                         return;
