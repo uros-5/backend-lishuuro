@@ -1,4 +1,4 @@
-use bson::{bson, doc, oid::ObjectId};
+use bson::{ doc, oid::ObjectId};
 use mongodb::Collection;
 use serde_json::Value;
 use shuuro::{init, position::Outcome, Color, Move, PieceType, Position, Shop};

@@ -5,7 +5,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{json, Value};
 use shuuro::Color;
 use std::{collections::HashMap, time::Duration as StdD};
-use time::{Duration, OffsetDateTime};
+use time::{Duration, OffsetDateTime, PrimitiveDateTime};
 
 pub const VARIANTS: [&str; 1] = ["shuuro12"];
 pub const DURATION_RANGE: [i64; 28] = [
@@ -557,12 +557,16 @@ where
     D: Deserializer<'de>,
 {
     let s: &str = Deserialize::deserialize(data)?;
+    let s = String::from(s);
+    let s = s.split(".").next().unwrap();
     let format = "%F %T";
-    match OffsetDateTime::parse(s, format) {
-        Ok(i) => {
-            return Ok(i);
+    match PrimitiveDateTime::parse(&s, format) {
+        Ok(d) => {
+            //return Ok(i);
+            return Ok(d.assume_utc());
         }
-        Err(_) => {
+        Err(e) => {
+            println!("{}", e);
             return Ok(OffsetDateTime::now_utc());
         }
     }

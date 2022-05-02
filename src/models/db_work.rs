@@ -1,8 +1,7 @@
 use crate::websockets::lobby::Lobby;
 use crate::websockets::messages::{GameMessage, GameMessageType};
-use actix::prelude::{Actor, Context, Handler, Recipient};
+use actix::prelude::{Context};
 use actix::AsyncContext;
-use actix::WrapFuture;
 use bson::{doc, oid::ObjectId};
 use futures::stream::TryStreamExt;
 use futures::Future;
