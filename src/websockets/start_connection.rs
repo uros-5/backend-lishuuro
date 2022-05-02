@@ -26,17 +26,17 @@ pub async fn start_connection(
         username = random_username();
         let anon = User::new(username.clone());
         let verifier = create_verifier();
-        set_session(&session, verifier).await;
-        set_username(&session, &anon.username).await;
-        set_reg(&session, &false).await;
+        set_value(&session, "codeVerifier", &verifier).await;
+        set_value(&session, "username", &anon.username).await;
+        set_value(&session, "reg", &false).await;
         let mongo_result = app_data.users.insert_one(&anon, None).await;
         match mongo_result {
             Ok(_) => (),
             Err(e) => {}
         }
     } else {
-        set_username(&session, &username);
-        set_reg(&session, &logged);
+        set_value(&session, "username", &username);
+        set_value(&session, "reg", &logged);
     }
 
     let ws = WsConn::new(username, logged, srv.get_ref().clone());

@@ -1,10 +1,9 @@
-use std::{sync::Mutex, time::Duration};
+use std::{sync::Mutex};
 
 use actix_session::Session;
 use actix_web::{http, web, HttpRequest, HttpResponse, Responder};
 use bson::doc;
 use futures::TryStreamExt;
-use itertools::Itertools;
 use querystring::querify;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -23,7 +22,7 @@ struct Info {
 
 pub async fn login(_: HttpRequest, session: Session) -> impl Responder {
     let (lichess_url, verifier) = login_url();
-    set_session(&session, verifier).await;
+    set_value(&session, "codeVerifier", &verifier).await;
     HttpResponse::Found()
         .header(http::header::LOCATION, lichess_url.to_string())
         .finish()
@@ -50,17 +49,17 @@ pub async fn callback<'a>(
                     match user_exist {
                         Ok(user) => match user {
                             None => {
-                                set_username(&session, &lichess_user).await;
-                                set_reg(&session, &true).await;
+                                set_value(&session, "username", &lichess_user).await;
+                                set_value(&session, "reg", &true).await;
                                 let new_user = User::new(lichess_user);
                                 app_data.users.insert_one(new_user, None).await;
                             }
                             _ => {
-                                set_username(&session, &lichess_user).await;
-                                set_reg(&session, &true).await;
+                                set_value(&session, "username", &lichess_user).await;
+                                set_value(&session, "reg", &true).await;
                             }
                         },
-                        Err(err) => {}
+                        Err(_) => {}
                     }
                 }
             }
@@ -139,7 +138,7 @@ pub async fn user_games(
     web::Json(json!({"exist": false}))
 }
 
-pub async fn test(session: Session) -> impl Responder {
+pub async fn test(_: Session) -> impl Responder {
     let now = OffsetDateTime::now_utc();
     web::Json(json!({ "d": now.to_string()}))
 }

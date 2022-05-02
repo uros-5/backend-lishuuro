@@ -57,7 +57,13 @@ pub fn login_url() -> (Url, String) {
     (final_url, verifier)
 }
 pub fn random_username() -> String {
-    format!("Anon-{}", encode(rand::thread_rng().gen::<[u8; 6]>()).replace("+","").replace("/","").replace("=",""))
+    format!(
+        "Anon-{}",
+        encode(rand::thread_rng().gen::<[u8; 6]>())
+            .replace("+", "")
+            .replace("/", "")
+            .replace("=", "")
+    )
 }
 
 pub async fn get_lichess_token(session: &Session, code: &str) -> Token {
@@ -102,7 +108,7 @@ pub async fn get_lichess_user(token: String) -> String {
                 Err(_) => {}
             }
         }
-        Err(err) => {}
+        Err(_) => {}
     }
     String::from("")
 }
