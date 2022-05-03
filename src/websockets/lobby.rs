@@ -114,6 +114,11 @@ impl Lobby {
         }
         (false, 0)
     }
+
+    pub fn load_games(&mut self, games: Vec<(String, ShuuroGame)>) -> &mut Self {
+        self.games.set_all(games);
+        self
+    }
 }
 
 impl Actor for Lobby {
@@ -178,20 +183,10 @@ impl Handler<RegularMessage> for Lobby {
                                         return self.send_message_to_spectators(&m.game_id, res_s);
                                     }
                                     None => {
-                                        let filter =
-                                            doc! {"_id": ObjectId::from_str(&m.game_id).unwrap()};
-                                        let db = self.db_shuuro_games.clone();
                                         let self2 = self.clone();
-                                        let b = Box::pin(async move {
-                                            let game = db.find_one(filter, None);
-                                            if let Ok(g) = game.await {
-                                                if let Some(g) = g {
-                                                    let res = serde_json::json!({"t": "live_game_start", "game_id": &m.game_id, "game_info": &g.clone()});
-
-                                                    self2.send_message(&msg.player, res);
-                                                }
-                                            }
-                                        });
+                                        let game_id = m.game_id.clone();
+                                        let player = msg.player.clone();
+                                        let b = get_game(&self2, game_id, player);
                                         let actor_future = b.into_actor(self);
                                         ctx.spawn(actor_future);
                                         return ();
@@ -403,6 +398,15 @@ impl Handler<RegularMessage> for Lobby {
                                         return;
                                     }
                                 }
+                            }
+                        } else if t == "save_to_db" {
+                            if &msg.player.username() == "ADMIN" {
+                                res = serde_json::json!({"t": "live_restart"});
+                                let all = self.games.get_all();
+                                let b = update_all(&self, all);
+                                let actor_future = b.into_actor(self);
+                                ctx.spawn(actor_future);
+                                return self.send_message_to_all(res);
                             }
                         } else {
                             () //res = serde_json::json!({"t": "error"});

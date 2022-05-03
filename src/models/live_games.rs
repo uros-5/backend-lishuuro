@@ -1,4 +1,4 @@
-use bson::{ doc, oid::ObjectId};
+use bson::{doc, oid::ObjectId};
 use mongodb::Collection;
 use serde_json::Value;
 use shuuro::{init, position::Outcome, Color, Move, PieceType, Position, Shop};
@@ -32,6 +32,20 @@ impl LiveGames {
         if let Some(mut g) = self.shuuro_games.get_mut(&id) {
             g.add_spectator(game.white.as_str());
             g.add_spectator(game.black.as_str());
+
+            if game.current_stage == 0 {
+                let hand = format!("{}{}", &game.white_hand, &game.black_hand);
+                g.shop.set_hand(&hand);
+            } else if game.current_stage == 1 {
+                g.deploy.set_sfen(&game.sfen);
+                g.time_control.update_stage(1);
+                g.game.side_to_move = g.deploy.side_to_move().to_string();
+                g.game.last_clock = g.time_control.get_last_click();
+            } else if game.current_stage == 2 {
+                g.fight.set_sfen(&game.sfen);
+                g.time_control.update_stage(2);
+                g.game.last_clock = g.time_control.get_last_click();
+            }
         }
     }
 
@@ -191,6 +205,20 @@ impl LiveGames {
             }
         }
     }
+
+    pub fn get_all(&self) -> Vec<(String, ShuuroGame)> {
+        let mut all = vec![];
+        for i in self.shuuro_games.iter() {
+            all.push((i.0.clone(), i.1.game.clone()));
+        }
+        all
+    }
+
+    pub fn set_all(&mut self, games: Vec<(String, ShuuroGame)>) {
+        for i in games.iter() {
+            self.add_game(i.0.clone(), &i.1);
+        }
+    }
 }
 impl Default for LiveGames {
     fn default() -> Self {
@@ -313,6 +341,8 @@ impl ShuuroLive {
                                 self.shop.play(m);
                                 self.draws = [false, false];
                                 if last_credit != self.shop.credit(*color) {
+                                    let hand = self.get_hand(&username);
+                                    self.set_hand(color, &hand);
                                     /*
                                     self.game.shop_history.push(
                                         self.shop.get_sfen_history(color).last().unwrap().clone(),
@@ -347,6 +377,14 @@ impl ShuuroLive {
                     }
                 }
             }
+        }
+    }
+
+    pub fn set_hand(&mut self, color: &Color, hand: &String) {
+        match color {
+            Color::White => self.game.white_hand = hand.clone(),
+            Color::Black => self.game.black_hand = hand.clone(),
+            _ => (),
         }
     }
 

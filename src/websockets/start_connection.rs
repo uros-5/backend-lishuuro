@@ -18,6 +18,7 @@ pub async fn start_connection(
     srv: Data<Addr<Lobby>>,
     session: Session,
     app_data: web::Data<Mutex<AppState>>,
+    redis: redis::Connection,
 ) -> Result<HttpResponse, Error> {
     let (logged, mut username) = is_logged(&session).await;
     let app_data = app_data.lock().unwrap();
@@ -35,8 +36,8 @@ pub async fn start_connection(
             Err(e) => {}
         }
     } else {
-        set_value(&session, "username", &username);
-        set_value(&session, "reg", &logged);
+        set_value(&session, "username", &username).await;
+        set_value(&session, "reg", &logged).await;
     }
 
     let ws = WsConn::new(username, logged, srv.get_ref().clone());
