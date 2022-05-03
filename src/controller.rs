@@ -123,7 +123,9 @@ pub async fn user_games(
                         games.push(g);
                         if count < 6 {
                             count += 1;
+                            if count == 5 { break }
                         }
+                        
                     }
                     None => {
                         break;

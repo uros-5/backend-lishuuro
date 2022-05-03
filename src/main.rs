@@ -7,6 +7,7 @@ use std::sync::Mutex;
 
 use time::Duration;
 
+use crate::models::db_work::get_all;
 use actix_cors::Cors;
 use actix_redis::RedisSession;
 use actix_web::{web, App, HttpServer};
@@ -34,17 +35,23 @@ async fn main() -> std::io::Result<()> {
     let users = db.collection::<User>("users");
     let shuuro_games = db.collection::<ShuuroGame>("shuuroGames");
     let news_ = db.collection::<NewsItem>("news");
-    let lobby = Lobby::new(users, shuuro_games, news_).start();
+    let past_games = get_all(&shuuro_games).await;
+    let lobby = Lobby::new(users, shuuro_games, news_)
+        .load_games(past_games)
+        .clone()
+        .start();
     HttpServer::new(move || {
         let users = db.collection::<User>("users");
         let news_items = db.collection::<NewsItem>("news");
         let shuuro_games = db.collection::<ShuuroGame>("shuuroGames");
+        let key = read_key();
         App::new()
             .data(Mutex::new(AppState::new(users, news_items, shuuro_games)))
             .data(lobby.clone())
+            .data(redis_con())
             .wrap(
-                RedisSession::new("127.0.0.1:6379", &read_key())
-                    .cookie_max_age(Some(Duration::days(365))),
+                RedisSession::new("127.0.0.1:6379", &key)
+                    .cookie_max_age(Some(Duration::days(3650))).ttl(172800),
             )
             .wrap(get_cors())
             .route("/login", web::get().to(login))
@@ -67,4 +74,10 @@ pub fn get_cors() -> Cors {
         .allow_any_method()
         .supports_credentials();
     cors
+}
+
+pub fn redis_con() -> redis::Connection {
+    let r_client = redis::Client::open("127.0.0.1:6379");
+    let r = r_client.ok().unwrap().get_connection().unwrap();
+    r
 }
