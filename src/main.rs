@@ -48,10 +48,9 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .data(Mutex::new(AppState::new(users, news_items, shuuro_games)))
             .data(lobby.clone())
-            .data(redis_con())
             .wrap(
                 RedisSession::new("127.0.0.1:6379", &key)
-                    .cookie_max_age(Some(Duration::days(3650))).ttl(172800),
+                    .cookie_max_age(Some(Duration::days(365))).ttl(172800),
             )
             .wrap(get_cors())
             .route("/login", web::get().to(login))
@@ -76,8 +75,3 @@ pub fn get_cors() -> Cors {
     cors
 }
 
-pub fn redis_con() -> redis::Connection {
-    let r_client = redis::Client::open("127.0.0.1:6379");
-    let r = r_client.ok().unwrap().get_connection().unwrap();
-    r
-}

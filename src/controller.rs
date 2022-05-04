@@ -1,9 +1,10 @@
-use std::{sync::Mutex};
+use std::sync::Mutex;
 
 use actix_session::Session;
 use actix_web::{http, web, HttpRequest, HttpResponse, Responder};
 use bson::doc;
 use futures::TryStreamExt;
+use mongodb::options::FindOptions;
 use querystring::querify;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -11,7 +12,7 @@ use time::OffsetDateTime;
 
 use crate::{
     lichess::login::*,
-    models::model::{AppState, User},
+    models::model::{AppState, ShuuroGame, User},
     models::redis_session::*,
 };
 
@@ -105,34 +106,20 @@ pub async fn user_games(
     path: web::Path<String>,
 ) -> impl Responder {
     let app_data = app_data.lock().unwrap();
+    let find_options = FindOptions::builder()
+        .sort(doc! {"$natural": -1})
+        .limit(Some(5))
+        .build();
     let item = app_data
         .games
         .find(
             doc! {"$or": [{"white": path.as_str()}, {"black": path.as_str()}]},
-            None,
+            Some(find_options),
         )
         .await;
     match item {
-        Ok(mut c) => {
-            let mut count = 0;
-            let mut games = vec![];
-
-            while let Ok(g) = c.try_next().await {
-                match g {
-                    Some(g) => {
-                        games.push(g);
-                        if count < 6 {
-                            count += 1;
-                            if count == 5 { break }
-                        }
-                        
-                    }
-                    None => {
-                        break;
-                    }
-                }
-            }
-
+        Ok(c) => {
+            let games: Vec<ShuuroGame> = c.try_collect().await.unwrap_or_else(|_| vec![]);
             return web::Json(json!({"exist": true, "games": games}));
         }
         Err(_e) => {}

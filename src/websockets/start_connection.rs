@@ -18,7 +18,6 @@ pub async fn start_connection(
     srv: Data<Addr<Lobby>>,
     session: Session,
     app_data: web::Data<Mutex<AppState>>,
-    redis: redis::Connection,
 ) -> Result<HttpResponse, Error> {
     let (logged, mut username) = is_logged(&session).await;
     let app_data = app_data.lock().unwrap();
