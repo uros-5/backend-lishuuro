@@ -14,14 +14,14 @@ use super::model::{ActivePlayer, NewsItem, PlayerMatch, ShuuroGame, User};
 
 macro_rules! gr {
     ($l:expr, $res:expr) => {
-        GameResult::from(&PlayerMatch::new($l, $res))
+        PlayerMatch::new($l, $res)
     };
 }
 
 macro_rules! gr2 {
     ($result:expr, $wr:expr, $br:expr) => {{
-        let wr_n: GameResult;
-        let br_n: GameResult;
+        let wr_n: PlayerMatch;
+        let br_n: PlayerMatch;
         if $result == "w" {
             wr_n = gr!($wr, "w");
             br_n = gr!($br, "l");
@@ -50,22 +50,20 @@ pub fn update_entire_game(
         match game1.await {
             _g => {
                 if end {
-                    fn white_win() {}
                     let wr = game.ratings.get(&game.white).unwrap();
                     let br = game.ratings.get(&game.white).unwrap();
 
-                    let mut wr_new: GameResult;
-                    let mut br_new: GameResult;
-
-                    //let a = gr!(wr, "d");
+                    let mut wrn = gr!(wr, "d");
+                    let mut brn = gr!(br, "d");
                     if [3, 4, 5, 6].contains(&game.status) {
-                        wr_new = gr!(wr, "d");
-                        br_new = gr!(br, "d");
+                        wrn = PlayerMatch::new(wr, "d");
                     } else if game.status == 1 {
-                        (wr_new, br_new) = gr2!(&game.result, wr, br);
+                        (wrn, brn) = gr2!(&game.result, wr, br);
                     } else if game.status == 7 {
-                        (wr_new, br_new) = gr2!(&game.result, wr, br);
+                        (wrn, brn) = gr2!(&game.result, wr, br);
                     }
+                    add_result(&self2.db_users, &wrn, &game.white).await;
+                    add_result(&self2.db_users, &brn, &game.black).await;
                 }
 
                 // update user ratings for both
@@ -106,6 +104,23 @@ pub fn update_all(s: &Lobby, all: Vec<(String, ShuuroGame)>) -> impl Future<Outp
         }
     });
     b
+}
+
+pub async fn add_result(users: &Collection<User>, m: &PlayerMatch, username: &String) {
+    let filter = doc! { "_id": username };
+    let update = doc! {"$push": {"last_games": bson::to_bson(m).unwrap()}};
+    if let Ok(c) = users.find_one_and_update(filter, update, None).await {
+        if let Some(user) = c {
+            let mut temp: &Vec<PlayerMatch> = &vec![];
+            if user.last_games.len() <= 15 {
+                temp = &user.last_games;
+            }
+            let nr = new_ratings(m.r, m.d, temp);
+            let update = doc! {"$set": {"rating": nr.value, "deviation": nr.deviation}};
+            let filter = doc! { "_id": username };
+            users.find_one_and_update(filter, update, None).await;
+        }
+    }
 }
 
 pub fn get_home_news(
@@ -204,11 +219,11 @@ pub async fn user_ratings(
     None
 }
 
-pub fn new_ratings(value: f64, deviation: f64, matches: Vec<PlayerMatch>) -> GlickoRating {
+pub fn new_ratings(value: f64, deviation: f64, matches: &Vec<PlayerMatch>) -> GlickoRating {
     let current_rating = GlickoRating { value, deviation };
     let mut results: Vec<GameResult> = vec![];
     for m in matches {
-        results.push(GameResult::from(&m));
+        results.push(GameResult::from(m));
     }
     let new_rating: GlickoRating = new_rating(current_rating.into(), &results, 0.5).into();
     new_rating

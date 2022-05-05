@@ -58,7 +58,7 @@ impl User {
             active: true,
             currently_playing: false,
             created_at: String::from(""),
-            last_games: vec![],
+            last_games: vec![PlayerMatch::new(&[1500.00, 300.00],"d")],
             rating: 1500.00,
             deviation: 300 as f64,
         }
@@ -74,9 +74,9 @@ impl User {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PlayerMatch {
-    r: f64,
-    d: f64,
-    o: String,
+    pub r: f64,
+    pub d: f64,
+    pub o: String,
 }
 
 impl PlayerMatch {
