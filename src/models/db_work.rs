@@ -5,22 +5,71 @@ use actix::AsyncContext;
 use bson::{doc, oid::ObjectId};
 use futures::stream::TryStreamExt;
 use futures::Future;
+use glicko2::{new_rating, GameResult, GlickoRating};
 use mongodb::Collection;
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use super::model::{ActivePlayer, NewsItem, ShuuroGame};
+use super::model::{ActivePlayer, NewsItem, PlayerMatch, ShuuroGame, User};
 
-pub fn update_entire_game(s: &Lobby, id: &String, game: &ShuuroGame) -> impl Future<Output = ()> {
+macro_rules! gr {
+    ($l:expr, $res:expr) => {
+        GameResult::from(&PlayerMatch::new($l, $res))
+    };
+}
+
+macro_rules! gr2 {
+    ($result:expr, $wr:expr, $br:expr) => {{
+        let wr_n: GameResult;
+        let br_n: GameResult;
+        if $result == "w" {
+            wr_n = gr!($wr, "w");
+            br_n = gr!($br, "l");
+        } else {
+            wr_n = gr!($wr, "l");
+            br_n = gr!($br, "w");
+        }
+        (wr_n, br_n)
+    }};
+}
+
+pub fn update_entire_game(
+    s: &Lobby,
+    id: &String,
+    game: &ShuuroGame,
+    end: bool,
+) -> impl Future<Output = ()> {
     let filter = doc! {"_id": ObjectId::from_str(id.as_str()).unwrap()};
     let update = doc! {"$set": bson::to_bson(&game).unwrap()};
+    let game = game.clone();
     let self2 = s.clone();
     let b = Box::pin(async move {
         let game1 = self2
             .db_shuuro_games
             .find_one_and_update(filter, update, None);
         match game1.await {
-            _g => {}
+            _g => {
+                if end {
+                    fn white_win() {}
+                    let wr = game.ratings.get(&game.white).unwrap();
+                    let br = game.ratings.get(&game.white).unwrap();
+
+                    let mut wr_new: GameResult;
+                    let mut br_new: GameResult;
+
+                    //let a = gr!(wr, "d");
+                    if [3, 4, 5, 6].contains(&game.status) {
+                        wr_new = gr!(wr, "d");
+                        br_new = gr!(br, "d");
+                    } else if game.status == 1 {
+                        (wr_new, br_new) = gr2!(&game.result, wr, br);
+                    } else if game.status == 7 {
+                        (wr_new, br_new) = gr2!(&game.result, wr, br);
+                    }
+                }
+
+                // update user ratings for both
+            }
         };
     });
     b
@@ -104,23 +153,63 @@ pub fn get_game<'a>(
 
 pub fn new_game<'a>(
     ctx: &Context<Lobby>,
-    col: Collection<ShuuroGame>,
+    shuuro_games: Collection<ShuuroGame>,
     users: [String; 2],
     shuuro_game: ShuuroGame,
+    users_db: Collection<User>,
 ) -> impl Future<Output = ()> + 'a {
     let ctx = ctx.address().clone();
-    let shuuro_game = shuuro_game.clone();
+    let mut shuuro_game = shuuro_game.clone();
     let b = Box::pin(async move {
-        let game_added = col.insert_one(&shuuro_game, None);
+        let game_added = shuuro_games.insert_one(&shuuro_game, None);
         match game_added.await {
             g => {
+                let ratings = user_ratings(&users_db, &users).await;
+                if let Some(ratings) = ratings {
+                    shuuro_game.update_ratings(ratings);
+                }
                 let id = g.ok().unwrap().inserted_id.to_string();
                 let game_id = id.replace("ObjectId(\"", "").replace("\")", "");
                 ctx.do_send(GameMessage {
-                    message_type: GameMessageType::new_adding_game(game_id, users, shuuro_game),
+                    message_type: GameMessageType::new_adding_game(
+                        game_id,
+                        users.clone(),
+                        shuuro_game,
+                    ),
                 });
             }
         }
     });
     b
+}
+
+pub async fn user_ratings(
+    col: &Collection<User>,
+    users: &[String; 2],
+) -> Option<HashMap<String, [f64; 2]>> {
+    let mut ratings: HashMap<String, [f64; 2]> = HashMap::new();
+    let players = col
+        .find(doc! {"$or": [{"_id": &users[0]}, {"_id": &users[1]}]}, None)
+        .await;
+    if let Ok(cursor) = players {
+        let players: Vec<User> = cursor.try_collect().await.unwrap_or_else(|_| vec![]);
+        if players.len() != 2 {
+            return None;
+        }
+        for user in players.iter() {
+            ratings.insert(user._id.clone(), [user.rating, user.deviation]);
+        }
+        return Some(ratings);
+    }
+    None
+}
+
+pub fn new_ratings(value: f64, deviation: f64, matches: Vec<PlayerMatch>) -> GlickoRating {
+    let current_rating = GlickoRating { value, deviation };
+    let mut results: Vec<GameResult> = vec![];
+    for m in matches {
+        results.push(GameResult::from(&m));
+    }
+    let new_rating: GlickoRating = new_rating(current_rating.into(), &results, 0.5).into();
+    new_rating
 }

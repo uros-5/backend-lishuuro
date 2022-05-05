@@ -36,4 +36,5 @@ uuid = { version = "0.8", features = ["v4", "serde"] }
 itertools = "0.10"
 bitintr = "0.3"
 thiserror = "1.0"
+glicko2 = "0.3.1"
 

@@ -1,4 +1,5 @@
 use bson::{doc, oid::ObjectId};
+use glicko2::{GameResult, GlickoRating};
 use json_value_merge::Merge;
 use mongodb::Collection;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -44,7 +45,9 @@ pub struct User {
     pub active: bool,
     pub currently_playing: bool,
     pub created_at: String,
-    pub last_games: Vec<String>,
+    pub last_games: Vec<PlayerMatch>,
+    pub rating: f64,
+    pub deviation: f64,
 }
 
 impl User {
@@ -56,6 +59,8 @@ impl User {
             currently_playing: false,
             created_at: String::from(""),
             last_games: vec![],
+            rating: 1500.00,
+            deviation: 300 as f64,
         }
     }
 
@@ -64,6 +69,37 @@ impl User {
         let second = json!({ "reg": reg });
         first.merge(second);
         first
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PlayerMatch {
+    r: f64,
+    d: f64,
+    o: String,
+}
+
+impl PlayerMatch {
+    pub fn new(rating: &[f64; 2], o: &str) -> Self {
+        Self {
+            r: rating[0],
+            d: rating[1],
+            o: String::from(o),
+        }
+    }
+}
+
+impl From<&PlayerMatch> for GameResult {
+    fn from(m: &PlayerMatch) -> Self {
+        let r = GlickoRating {
+            value: m.r,
+            deviation: m.d,
+        };
+        match m.o.as_str() {
+            "w" => GameResult::win(r),
+            "l" => GameResult::loss(r),
+            _ => GameResult::draw(r),
+        }
     }
 }
 
@@ -100,6 +136,7 @@ pub struct ShuuroGame {
     pub white_hand: String,
     pub black_hand: String,
     pub sfen: String,
+    pub ratings: HashMap<String, [f64; 2]>,
 }
 
 impl Default for ShuuroGame {
@@ -126,6 +163,7 @@ impl Default for ShuuroGame {
             white_hand: String::from(""),
             black_hand: String::from(""),
             sfen: String::from(""),
+            ratings: HashMap::new(),
         }
     }
 }
@@ -148,6 +186,10 @@ impl ShuuroGame {
         } else {
             Color::NoColor
         }
+    }
+
+    pub fn update_ratings(&mut self, ratings: HashMap<String, [f64; 2]>) {
+        self.ratings = ratings;
     }
 }
 

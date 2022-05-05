@@ -239,7 +239,7 @@ impl Handler<RegularMessage> for Lobby {
                                         == &serde_json::json!(true)
                                     {
                                         let game = self.games.get_game(&m.game_id).unwrap().1;
-                                        let b = update_entire_game(&self, &m.game_id, &game);
+                                        let b = update_entire_game(&self, &m.game_id, &game, true);
                                         let actor_future = b.into_actor(self);
                                         ctx.spawn(actor_future);
                                         self.games.remove_game(&m.game_id);
@@ -265,7 +265,7 @@ impl Handler<RegularMessage> for Lobby {
                                     self.send_message_to_spectators(&m.game_id, played);
                                     if status > &0 {
                                         let game = self.games.get_game(&m.game_id).unwrap().1;
-                                        let b = update_entire_game(&self, &m.game_id, &game);
+                                        let b = update_entire_game(&self, &m.game_id, &game, true);
                                         let actor_future = b.into_actor(self);
                                         ctx.spawn(actor_future);
                                         self.games.remove_game(&m.game_id);
@@ -295,7 +295,7 @@ impl Handler<RegularMessage> for Lobby {
                                     res = serde_json::json!({"t": t, "draw": true});
                                     self.send_message_to_spectators(&m.game_id, res);
                                     let game = self.games.get_game(&m.game_id).unwrap().1;
-                                    let b = update_entire_game(&self, &m.game_id, &game);
+                                    let b = update_entire_game(&self, &m.game_id, &game, true);
                                     let actor_future = b.into_actor(self);
                                     ctx.spawn(actor_future);
                                     self.games.remove_game(&m.game_id);
@@ -316,7 +316,7 @@ impl Handler<RegularMessage> for Lobby {
                                     res = serde_json::json!({"t": t, "resign": true, "player": &msg.player.username()});
                                     self.send_message_to_spectators(&m.game_id, res);
                                     let game = self.games.get_game(&m.game_id).unwrap().1;
-                                    let b = update_entire_game(&self, &m.game_id, &game);
+                                    let b = update_entire_game(&self, &m.game_id, &game, true);
                                     let actor_future = b.into_actor(self);
                                     ctx.spawn(actor_future);
                                     self.games.remove_game(&m.game_id);
@@ -392,7 +392,8 @@ impl Handler<RegularMessage> for Lobby {
                                             self.send_message_to_all(temp_res);
                                         }
                                         let db_shuuro_games = self.db_shuuro_games.clone();
-                                        let b = new_game(&ctx, db_shuuro_games, users, shuuro_game);
+                                        let db_users = self.db_users.clone();
+                                        let b = new_game(&ctx, db_shuuro_games, users, shuuro_game, db_users);
                                         let actor_future = b.into_actor(self);
                                         ctx.spawn(actor_future);
                                         return;
