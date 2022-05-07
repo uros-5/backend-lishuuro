@@ -58,7 +58,7 @@ impl User {
             active: true,
             currently_playing: false,
             created_at: String::from(""),
-            last_games: vec![PlayerMatch::new(&[1500.00, 300.00],"d")],
+            last_games: vec![PlayerMatch::new(&[1500.00, 300.00], "d")],
             rating: 1500.00,
             deviation: 300 as f64,
         }
@@ -304,7 +304,7 @@ impl ChatRooms {
     }
 }
 
-#[derive(Serialize, Deserialize, Hash, Eq, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Hash, Clone)]
 pub struct ActivePlayer {
     reg: bool,
     username: String,
@@ -324,6 +324,14 @@ impl ActivePlayer {
         self.reg.clone()
     }
 }
+
+impl PartialEq for ActivePlayer {
+    fn eq(&self, other: &Self) -> bool {
+        self.username == other.username
+    }
+}
+
+impl Eq for ActivePlayer {}
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct LobbyGame {
@@ -416,6 +424,27 @@ pub struct GameGetHand {
 pub struct GameGetConfirmed {
     pub t: String,
     pub game_id: String,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct TvGame {
+    pub t: String,
+    pub game_id: String,
+    pub w: String,
+    pub b: String,
+    pub fen: String,
+}
+
+impl TvGame {
+    pub fn new(t: &str, game_id: &str, w: &str, b: &str, fen: &str) -> Self {
+        Self {
+            t: String::from(t),
+            game_id: String::from(game_id),
+            w: String::from(w),
+            b: String::from(b),
+            fen: String::from(fen),
+        }
+    }
 }
 
 #[derive(Clone)]

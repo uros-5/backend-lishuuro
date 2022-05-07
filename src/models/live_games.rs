@@ -9,7 +9,7 @@ use std::{
     str::FromStr,
 };
 
-use super::model::TimeControl;
+use super::model::{TimeControl, TvGame};
 
 #[derive(Clone)]
 pub struct LiveGames {
@@ -218,6 +218,27 @@ impl LiveGames {
         for i in games.iter() {
             self.add_game(i.0.clone(), &i.1);
         }
+    }
+
+    pub fn get_tv(&self) -> Vec<TvGame> {
+        let c = 0;
+        let mut games = vec![];
+        for i in &self.shuuro_games {
+            if c == 20 {
+                break;
+            }
+            let f = &i.1.game.sfen;
+            if f == "" {
+                continue;
+            }
+            let id = &i.1.game.game_id;
+            let w = &i.1.game.white;
+            let b = &i.1.game.black;
+            let t = "live_tv";
+            let tv = TvGame::new(t, id, w, b, f);
+            games.push(tv);
+        }
+        games
     }
 }
 impl Default for LiveGames {
