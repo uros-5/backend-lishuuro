@@ -282,7 +282,6 @@ impl Handler<RegularMessage> for Lobby {
                                         res = serde_json::json!({"t": "active_games_count", "cnt": self.games.shuuro_games.len()});
                                         let tv_res = serde_json::json!({"t": "live_game_end", "game_id": &m.game_id});
                                         self.send_message_to_tv(&tv_res);
-
                                         return self.send_message_to_all(res);
                                     }
                                     return ();

@@ -50,7 +50,8 @@ async fn main() -> std::io::Result<()> {
             .data(lobby.clone())
             .wrap(
                 RedisSession::new("127.0.0.1:6379", &key)
-                    .cookie_max_age(Some(Duration::days(365))).ttl(172800),
+                    .cookie_max_age(Some(Duration::days(365)))
+                    .ttl(172800),
             )
             .wrap(get_cors())
             .route("/login", web::get().to(login))
@@ -74,4 +75,3 @@ pub fn get_cors() -> Cors {
         .supports_credentials();
     cors
 }
-
