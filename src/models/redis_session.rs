@@ -31,7 +31,7 @@ pub async fn is_logged(session: &Session) -> (bool, String) {
 pub async fn new_user(session: &Session, app_data: web::Data<Mutex<AppState>>) -> (String, bool) {
     let app_data = app_data.lock().unwrap();
     let username = random_username();
-    let anon = User::new(username.clone());
+    let anon = User::new(&username);
     let verifier = create_verifier();
     set_value(&session, "codeVerifier", &verifier).await;
     set_value(&session, "username", &anon.username).await;

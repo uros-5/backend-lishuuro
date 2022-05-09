@@ -52,7 +52,8 @@ pub async fn callback<'a>(
                             None => {
                                 set_value(&session, "username", &lichess_user).await;
                                 set_value(&session, "reg", &true).await;
-                                let new_user = User::new(lichess_user);
+                                let new_user = User::new(&lichess_user);
+                                #[warn(unused_must_use)]
                                 app_data.users.insert_one(new_user, None).await;
                             }
                             _ => {

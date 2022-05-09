@@ -51,10 +51,10 @@ pub struct User {
 }
 
 impl User {
-    pub fn new(username: String) -> Self {
+    pub fn new(username: &String) -> Self {
         User {
-            _id: username.clone(),
-            username,
+            _id: String::from(username),
+            username: String::from(username),
             active: true,
             currently_playing: false,
             created_at: String::from(""),
@@ -209,15 +209,6 @@ pub struct ChatItem {
 }
 
 impl ChatItem {
-    pub fn new(user: &String, message: &String) -> Self {
-        let now = OffsetDateTime::now_utc();
-        ChatItem {
-            id: String::from(""),
-            user: user.clone(),
-            message: message.clone(),
-            time: format!("{}:{}", now.hour(), now.minute()),
-        }
-    }
     pub fn date(&self) -> String {
         self.time.clone()
     }
@@ -314,7 +305,7 @@ impl ActivePlayer {
     pub fn new(reg: &bool, username: &String) -> Self {
         ActivePlayer {
             reg: *reg,
-            username: username.clone(),
+            username: String::from(username),
         }
     }
     pub fn username(&self) -> String {
@@ -450,7 +441,6 @@ impl TvGame {
 #[derive(Clone)]
 pub struct LobbyGames {
     all: Vec<LobbyGame>,
-    duration_range: Vec<u8>,
 }
 
 impl Default for LobbyGames {
@@ -467,7 +457,6 @@ impl Default for LobbyGames {
         }
         LobbyGames {
             all: Vec::<LobbyGame>::new(),
-            duration_range: all,
         }
     }
 }
@@ -484,10 +473,6 @@ impl LobbyGames {
     }
     pub fn add(&mut self, game: LobbyGame) {
         self.all.push(game);
-    }
-
-    pub fn all(&self) -> &Vec<LobbyGame> {
-        &self.all
     }
 
     pub fn delete(&mut self, game: LobbyGame) -> i32 {
@@ -574,14 +559,6 @@ impl TimeControl {
             return self.black_player.whole_milliseconds() > 0;
         }
         false
-    }
-
-    pub fn set_clock(&mut self, c: char, d: Duration) {
-        if c == 'w' {
-            self.white_player = d;
-        } else if c == 'b' {
-            self.black_player = d;
-        }
     }
 
     pub fn get_clock(&self, c: char) -> Duration {

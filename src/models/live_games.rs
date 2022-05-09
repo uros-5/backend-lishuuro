@@ -1,13 +1,8 @@
-use bson::{doc, oid::ObjectId};
-use mongodb::Collection;
 use serde_json::Value;
 use shuuro::{init, position::Outcome, Color, Move, PieceType, Position, Shop};
 
 use crate::models::model::ShuuroGame;
-use std::{
-    collections::{HashMap, HashSet},
-    str::FromStr,
-};
+use std::collections::{HashMap, HashSet};
 
 use super::model::{TimeControl, TvGame};
 
@@ -26,10 +21,11 @@ impl LiveGames {
         true
     }
 
-    pub fn add_game(&mut self, id: String, game: &ShuuroGame) {
-        self.shuuro_games.insert(id.clone(), ShuuroLive::from(game));
+    pub fn add_game(&mut self, id: &String, game: &ShuuroGame) {
+        self.shuuro_games
+            .insert(String::from(id), ShuuroLive::from(game));
 
-        if let Some(mut g) = self.shuuro_games.get_mut(&id) {
+        if let Some(mut g) = self.shuuro_games.get_mut(id) {
             g.add_spectator(game.white.as_str());
             g.add_spectator(game.black.as_str());
 
@@ -95,8 +91,8 @@ impl LiveGames {
         None
     }
 
-    pub fn stop(&mut self, id: String) {
-        let game = self.shuuro_games.get_mut(&id);
+    pub fn stop(&mut self, id: &String) {
+        let game = self.shuuro_games.get_mut(id);
         match game {
             Some(g) => {
                 g.running = false;
@@ -158,14 +154,6 @@ impl LiveGames {
         0
     }
 
-    pub fn players(&self, game_id: &String) -> [String; 2] {
-        let game = self.shuuro_games.get(game_id);
-        if let Some(g) = game {
-            return g.players();
-        }
-        [String::from(""), String::from("")]
-    }
-
     pub fn confirmed_players(&self, game_id: &String) -> [bool; 2] {
         let game = self.shuuro_games.get(game_id);
         if let Some(g) = game {
@@ -216,7 +204,7 @@ impl LiveGames {
 
     pub fn set_all(&mut self, games: Vec<(String, ShuuroGame)>) {
         for i in games.iter() {
-            self.add_game(i.0.clone(), &i.1);
+            self.add_game(&i.0, &i.1);
         }
     }
 
@@ -278,10 +266,6 @@ impl From<&ShuuroGame> for ShuuroLive {
 }
 
 impl ShuuroLive {
-    pub fn format_res(&mut self) {
-        self.game.last_clock = self.time_control.get_last_click();
-    }
-
     pub fn can_add(&self, username: &String) -> bool {
         if &self.game.white == username || &self.game.black == username {
             return false;
@@ -289,8 +273,8 @@ impl ShuuroLive {
         true
     }
 
-    pub fn players(&self) -> [String; 2] {
-        [self.game.white.clone(), self.game.black.clone()]
+    pub fn players(&self) -> [&String; 2] {
+        [&self.game.white, &self.game.black]
     }
 
     pub fn spectators(&self) -> &HashSet<String> {
@@ -403,8 +387,8 @@ impl ShuuroLive {
 
     pub fn set_hand(&mut self, color: &Color, hand: &String) {
         match color {
-            Color::White => self.game.white_hand = hand.clone(),
-            Color::Black => self.game.black_hand = hand.clone(),
+            Color::White => self.game.white_hand = String::from(hand),
+            Color::Black => self.game.black_hand = String::from(hand),
             _ => (),
         }
     }
@@ -580,16 +564,9 @@ impl ShuuroLive {
         }
     }
 
-    pub fn update_stage_db(&self, current_stage: u8, col: &Collection<ShuuroGame>) {
-        let filter = doc! {"_id": ObjectId::from_str(self.game.game_id.as_str()).unwrap()};
-        let update = doc! {"$set": { "current_stage": bson::to_bson(&current_stage).unwrap()}};
-
-        col.find_one_and_update(filter, update, None);
-    }
-
     pub fn resign(&mut self, username: &String) -> bool {
         let players = self.players();
-        if players.contains(username) {
+        if players.contains(&username) {
             let color = self.player_color(username);
             self.game.status = 7;
             self.game.result = color.to_string();

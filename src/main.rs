@@ -5,6 +5,7 @@ mod websockets;
 
 use std::sync::Mutex;
 
+use mongodb::{Collection, Database};
 use time::Duration;
 
 use crate::models::db_work::get_all;
@@ -29,24 +30,20 @@ async fn main() -> std::io::Result<()> {
     let mut client_options = ClientOptions::parse("mongodb://127.0.0.1:27017")
         .await
         .expect("No client available");
-    let client = Client::with_options(client_options.clone()).expect("client not found");
     client_options.app_name = Some("lishuuro".to_string());
+    let client = Client::with_options(client_options).expect("client not found");
     let db = client.database("lishuuro");
-    let users = db.collection::<User>("users");
-    let shuuro_games = db.collection::<ShuuroGame>("shuuroGames");
-    let news_ = db.collection::<NewsItem>("news");
+    let (users, shuuro_games, news_) = get_cols(&db);
     let past_games = get_all(&shuuro_games).await;
     let lobby = Lobby::new(users, shuuro_games, news_)
         .load_games(past_games)
         .clone()
         .start();
     HttpServer::new(move || {
-        let users = db.collection::<User>("users");
-        let news_items = db.collection::<NewsItem>("news");
-        let shuuro_games = db.collection::<ShuuroGame>("shuuroGames");
+        let (users, shuuro_games, news_) = get_cols(&db);
         let key = read_key();
         App::new()
-            .data(Mutex::new(AppState::new(users, news_items, shuuro_games)))
+            .data(Mutex::new(AppState::new(users, news_, shuuro_games)))
             .data(lobby.clone())
             .wrap(
                 RedisSession::new("127.0.0.1:6379", &key)
@@ -74,4 +71,18 @@ pub fn get_cors() -> Cors {
         .allow_any_method()
         .supports_credentials();
     cors
+}
+
+pub fn get_cols(
+    db: &Database,
+) -> (
+    Collection<User>,
+    Collection<ShuuroGame>,
+    Collection<NewsItem>,
+) {
+    let users = db.collection::<User>("users");
+    let shuuro_games = db.collection::<ShuuroGame>("shuuroGames");
+    let news = db.collection::<NewsItem>("news");
+
+    (users, shuuro_games, news)
 }
