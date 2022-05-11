@@ -1,5 +1,5 @@
 use super::messages::{
-    Connect, Disconnect, GameMessage, GameMessageType, RegularMessage, WsMessage,
+    Connect, Disconnect, GameMessage, GameMessageType, News, RegularMessage, WsMessage,
 };
 use crate::models::db_work::*;
 use crate::models::live_games::LiveGames;
@@ -7,12 +7,15 @@ use crate::models::model::{
     ActivePlayer, ChatItem, ChatRooms, GameGetConfirmed, GameGetHand, GameMove, GameRequest,
     LobbyGame, LobbyGames, NewsItem, ShuuroGame, User,
 };
+use actix::dev::MessageResponse;
 use actix::prelude::{Actor, Context, Handler, Recipient};
-use actix::AsyncContext;
+use actix::{AsyncContext, Addr};
 use actix::WrapFuture;
 use mongodb::Collection;
 use serde_json;
 use std::collections::HashMap;
+use std::thread;
+use std::time::Duration;
 
 type Socket = Recipient<WsMessage>;
 
@@ -66,7 +69,7 @@ impl Lobby {
     pub fn send_message_to_spectators(&self, game_id: &String, message: &serde_json::Value) {
         if let Some(spectators) = self.games.spectators(game_id) {
             for i in spectators.iter() {
-                if let Some(user) = self.active_players.get(&ActivePlayer::new(&false, &i)) {
+                if let Some(user) = self.active_players.get(&ActivePlayer::new(&true, &i)) {
                     user.do_send(WsMessage(message.to_owned().to_string()));
                 }
             }
@@ -115,13 +118,23 @@ impl Lobby {
     }
 
     pub fn load_games(&mut self, games: Vec<(String, ShuuroGame)>) -> &mut Self {
-        self.games.set_all(games);
+        //self.games.set_all(games);
         self
     }
 }
 
 impl Actor for Lobby {
     type Context = Context<Self>;
+
+    fn started(&mut self, ctx: &mut Self::Context) {
+        let address = ctx.address().clone(); 
+        let db = self.db_shuuro_games.clone();
+
+        tokio::spawn(async move {
+            let past_games = get_all(&db).await; 
+            address.do_send(GameMessage::start_all(past_games));
+        });
+    }
 }
 
 impl Handler<RegularMessage> for Lobby {
@@ -498,9 +511,9 @@ impl Handler<Disconnect> for Lobby {
 }
 
 impl Handler<GameMessage> for Lobby {
-    type Result = ();
+    type Result = bool;
 
-    fn handle(&mut self, msg: GameMessage, _ctx: &mut Context<Self>) {
+    fn handle(&mut self, msg: GameMessage, ctx: &mut Context<Self>) -> Self::Result {
         match msg.message_type {
             GameMessageType::AddingGame {
                 game_id,
@@ -511,19 +524,58 @@ impl Handler<GameMessage> for Lobby {
                 self.add_spectator(users[0].as_str(), game_id.as_str());
                 self.add_spectator(users[1].as_str(), game_id.as_str());
                 let res = serde_json::json!({"t": "live_game_start", "game_id": game_id, "game_info": &shuuro_game });
-                self.games.add_game(&game_id, &shuuro_game);
+                self.games.add_game(&game_id, &shuuro_game, &ctx);
                 self.send_message_to_selected(res, users);
                 let res = serde_json::json!({"t": "active_games_count", "cnt": self.games.shuuro_games.len()});
                 self.send_message_to_all(res);
                 self.chat2.add_room(game_id);
+                return true;
             }
-            GameMessageType::News {
-                news,
-                active_player,
+            GameMessageType::TimeCheck { game_id } => {
+                let time = self.games.time_ok(&game_id);
+                return time;
+            }
+            GameMessageType::LostOnTime {
+                game_id,
             } => {
-                let res = serde_json::json!({"t": "home_news", "news": news });
-                self.send_message(&active_player, res);
+                let self2 = self.clone();
+                let game = self.games.lost_on_time(&game_id);
+                if let Some(game) = game {
+                    let b = update_entire_game(&self2, &game_id, &game, true);
+                    let actor_future = b.into_actor(&self2);
+                    ctx.spawn(actor_future);
+                    let res_specs = serde_json::json!({"t": "live_game_lot",
+                     "game_id": &game_id, "status": 8 as u8,
+                      "result": &game.side_to_move});
+                    let tv_res = serde_json::json!({"t": "live_game_end", "game_id": &game_id});
+                    self.send_message_to_spectators(&game_id, &res_specs);
+                    self.send_message_to_tv(&tv_res);
+                    return true;
+                }
+                return false;
+            },
+            GameMessageType::RemoveGame {
+                game_id 
+            } => {
+                    self.games.remove_game(&game_id);
+                    let res = serde_json::json!({"t": "active_games_count", "cnt": self.games.shuuro_games.len()});
+                    self.send_message_to_all(res);
+                    return true;
+            },
+            GameMessageType::StartAll {
+                games
+            } => {
+                self.games.set_all(games, &ctx);
+                return true;
             }
         }
+    }
+}
+
+impl Handler<News> for Lobby {
+    type Result = ();
+    fn handle(&mut self, msg: News, ctx: &mut Self::Context) -> Self::Result {
+        let res = serde_json::json!({"t": "home_news", "news": msg.news });
+        self.send_message(&msg.active_player, res);
     }
 }

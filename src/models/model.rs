@@ -5,6 +5,7 @@ use mongodb::Collection;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{json, Value};
 use shuuro::Color;
+use std::hash::{Hash, Hasher};
 use std::{collections::HashMap, time::Duration as StdD};
 use time::{Duration, OffsetDateTime, PrimitiveDateTime};
 
@@ -20,6 +21,7 @@ pub struct AppState {
     pub news: Collection<NewsItem>,
     pub games: Collection<ShuuroGame>,
     pub counter: u8,
+    pub login_state: String,
 }
 
 impl AppState {
@@ -27,11 +29,13 @@ impl AppState {
         users: Collection<User>,
         news: Collection<NewsItem>,
         games: Collection<ShuuroGame>,
+        login_state: String,
     ) -> Self {
         AppState {
             users,
             news,
             games,
+            login_state: login_state,
             counter: 0,
         }
     }
@@ -295,7 +299,7 @@ impl ChatRooms {
     }
 }
 
-#[derive(Serialize, Deserialize, Hash, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct ActivePlayer {
     reg: bool,
     username: String,
@@ -320,9 +324,19 @@ impl PartialEq for ActivePlayer {
     fn eq(&self, other: &Self) -> bool {
         self.username == other.username
     }
+
+    fn ne(&self, other: &Self) -> bool {
+        self.username != other.username
+    }
 }
 
 impl Eq for ActivePlayer {}
+
+impl Hash for ActivePlayer {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.username.hash(state);
+    }
+}
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct LobbyGame {
@@ -551,12 +565,14 @@ impl TimeControl {
 
     pub fn time_ok(&self, c: &String) -> bool {
         if self.stage == 0 {
-            return (self.white_player - self.elapsed()).whole_milliseconds() > 0;
+            if c == ""  {
+                return (self.white_player - self.elapsed()).whole_milliseconds() > 0;
+            } 
         }
         if c == "w" {
-            return self.white_player.whole_milliseconds() > 0;
+            return (self.white_player - self.elapsed()).whole_milliseconds() > 0;
         } else if c == "b" {
-            return self.black_player.whole_milliseconds() > 0;
+            return (self.black_player - self.elapsed()).whole_milliseconds() > 0;
         }
         false
     }

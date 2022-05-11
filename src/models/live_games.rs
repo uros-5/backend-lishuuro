@@ -1,10 +1,12 @@
+use actix::{Addr, Context};
 use serde_json::Value;
 use shuuro::{init, position::Outcome, Color, Move, PieceType, Position, Shop};
+use actix::AsyncContext;
 
-use crate::models::model::ShuuroGame;
+use crate::{models::model::ShuuroGame, websockets::lobby::Lobby};
 use std::collections::{HashMap, HashSet};
 
-use super::model::{TimeControl, TvGame};
+use super::{model::{TimeControl, TvGame}, db_work::start_clock};
 
 #[derive(Clone)]
 pub struct LiveGames {
@@ -21,7 +23,7 @@ impl LiveGames {
         true
     }
 
-    pub fn add_game(&mut self, id: &String, game: &ShuuroGame) {
+    pub fn add_game(&mut self, id: &String, game: &ShuuroGame, ctx: &Context<Lobby>) {
         self.shuuro_games
             .insert(String::from(id), ShuuroLive::from(game));
 
@@ -42,6 +44,7 @@ impl LiveGames {
                 g.time_control.update_stage(2);
                 g.game.last_clock = g.time_control.get_last_click();
             }
+            start_clock(ctx.address(), id);
         }
     }
 
@@ -202,9 +205,9 @@ impl LiveGames {
         all
     }
 
-    pub fn set_all(&mut self, games: Vec<(String, ShuuroGame)>) {
+    pub fn set_all(&mut self, games: Vec<(String, ShuuroGame)>, ctx: &Context<Lobby>) {
         for i in games.iter() {
-            self.add_game(&i.0, &i.1);
+            self.add_game(&i.0, &i.1, ctx);
         }
     }
 
@@ -227,6 +230,22 @@ impl LiveGames {
             games.push(tv);
         }
         games
+    }
+
+    pub fn time_ok(&self, game_id: &str) -> bool {
+        if let Some(g) = self.shuuro_games.get(game_id) {
+            return g.time_ok();
+        }
+        false 
+    }
+    pub fn lost_on_time(&mut self, game_id: &String) -> Option<&ShuuroGame> {
+        let game = self.shuuro_games.get_mut(game_id);
+        if let Some(mut i) = game {
+            let stm = &i.game.side_to_move.clone();
+            i.lost_on_time(stm);
+            return Some(&i.game);
+        }
+        None
     }
 }
 impl Default for LiveGames {
@@ -277,6 +296,10 @@ impl ShuuroLive {
         [&self.game.white, &self.game.black]
     }
 
+    pub fn time_ok(&self) -> bool {
+        self.time_control.time_ok(&self.game.side_to_move)
+    }
+
     pub fn spectators(&self) -> &HashSet<String> {
         &self.spectators
     }
@@ -290,6 +313,8 @@ impl ShuuroLive {
         self.spectators.remove(&String::from(username));
         self.spectators.len()
     }
+
+    
 
     pub fn confirmed_players(&self) -> [bool; 2] {
         [
@@ -375,9 +400,11 @@ impl ShuuroLive {
                         if c == "w" {
                             self.game.white_clock =
                                 self.time_control.get_clock(c.chars().last().unwrap());
+                            self.game.side_to_move = String::from("b");
                         } else {
                             self.game.black_clock =
                                 self.time_control.get_clock(c.chars().last().unwrap());
+                            self.game.side_to_move = String::from("w");
                         }
                     }
                 }
@@ -577,6 +604,18 @@ impl ShuuroLive {
         false
     }
 
+    pub fn lost_on_time(&mut self, stm: &String) -> &ShuuroGame {
+        self.game.result = String::from(stm);
+        println!("this is stm: {}", stm);
+        if stm == "" {
+            self.game.status = 5;
+        }
+        else {
+            self.game.status = 8;
+        }
+        &self.game
+    }
+
     fn player_color(&self, username: &String) -> Color {
         if username == &self.game.white {
             return Color::White;
@@ -585,4 +624,6 @@ impl ShuuroLive {
         }
         Color::NoColor
     }
+
+    
 }

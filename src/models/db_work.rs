@@ -1,7 +1,7 @@
 use crate::websockets::lobby::Lobby;
-use crate::websockets::messages::{GameMessage, GameMessageType};
-use actix::prelude::Context;
-use actix::AsyncContext;
+use crate::websockets::messages::{GameMessage, GameMessageType, News};
+use actix::prelude::{Context, Request};
+use actix::{Addr, AsyncContext};
 use bson::{doc, oid::ObjectId};
 use futures::stream::TryStreamExt;
 use futures::Future;
@@ -9,6 +9,8 @@ use glicko2::{new_rating, GameResult, GlickoRating};
 use mongodb::Collection;
 use std::collections::HashMap;
 use std::str::FromStr;
+use std::thread;
+use std::time::Duration;
 
 use super::model::{ActivePlayer, NewsItem, PlayerMatch, ShuuroGame, User};
 
@@ -55,7 +57,7 @@ pub fn update_entire_game(
 
                     let mut wrn = gr!(wr, "d");
                     let mut brn = gr!(br, "d");
-                    if [3, 4, 5, 6].contains(&game.status) {
+                    if [3, 4, 5, 6, 8].contains(&game.status) {
                         wrn = PlayerMatch::new(wr, "d");
                     } else if game.status == 1 {
                         (wrn, brn) = gr2!(&game.result, wr, br);
@@ -65,8 +67,6 @@ pub fn update_entire_game(
                     add_result(&self2.db_users, &wrn, &game.white).await;
                     add_result(&self2.db_users, &brn, &game.black).await;
                 }
-
-                // update user ratings for both
             }
         };
     });
@@ -135,9 +135,7 @@ pub fn get_home_news(
         let all = news.find(doc! {}, None).await;
         if let Ok(c) = all {
             let news_: Vec<NewsItem> = c.try_collect().await.unwrap_or_else(|_| vec![]);
-            ctx2.do_send(GameMessage {
-                message_type: GameMessageType::news(active_player, news_),
-            });
+            ctx2.do_send(News::news(active_player, news_));
             //ctx2.send_message(&msg.player, res)
         }
     });
@@ -173,6 +171,9 @@ pub fn new_game<'a>(
     shuuro_game: ShuuroGame,
     users_db: Collection<User>,
 ) -> impl Future<Output = ()> + 'a {
+    fn oid(id: String) -> String {
+        id.replace("ObjectId(\"", "").replace("\")", "")
+    }
     let ctx = ctx.address().clone();
     let mut shuuro_game = shuuro_game.clone();
     let b = Box::pin(async move {
@@ -184,14 +185,13 @@ pub fn new_game<'a>(
                     shuuro_game.update_ratings(ratings);
                 }
                 let id = g.ok().unwrap().inserted_id.to_string();
-                let game_id = id.replace("ObjectId(\"", "").replace("\")", "");
-                ctx.do_send(GameMessage {
-                    message_type: GameMessageType::new_adding_game(
-                        game_id,
-                        users.clone(),
-                        shuuro_game,
-                    ),
-                });
+                let game_id = oid(id);
+                ctx.do_send(GameMessage::new_adding_game(
+                    game_id.clone(),
+                    users.clone(),
+                    shuuro_game,
+                ));
+                start_clock(ctx, &game_id);
             }
         }
     });
@@ -227,4 +227,26 @@ pub fn new_ratings(value: f64, deviation: f64, matches: &Vec<PlayerMatch>) -> Gl
     }
     let new_rating: GlickoRating = new_rating(current_rating.into(), &results, 0.5).into();
     new_rating
+}
+
+pub fn start_clock(ctx: Addr<Lobby>, game_id: &String) {
+    let game_id = String::from(game_id);
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_millis(1500));
+        loop {
+            interval.tick().await;
+            let time = ctx.send(GameMessage::time_check(&game_id)).await;
+            if let Ok(time) = time {
+                if !time {
+                    println!("lost on time");
+                    ctx.send(GameMessage::lost_on_time(&game_id)).await;
+                    ctx.send(GameMessage::remove_game(&game_id)).await;
+                    break;
+                }
+            } else {
+                println!("game does not exist");
+                break;
+            }
+        }
+    });
 }
