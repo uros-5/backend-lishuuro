@@ -14,7 +14,7 @@ url = "2.2.2"
 actix-web = { version = "3.3.3", features = ["openssl"] }
 actix-session = "0.4.1"
 futures = "0.3.19"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "0.2.25", features = ["full"] }
 bson = "2.1.0"
 redis = "0.21.5"
 futures-util = "0.3.17"
