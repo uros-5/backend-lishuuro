@@ -34,13 +34,13 @@ pub fn create_challenge(verifier: &String) -> String {
     base64_encode(sha256(verifier.clone()))
 }
 
-pub fn login_url() -> (Url, String) {
+pub fn login_url(login_state: &String) -> (Url, String) {
     let url = "https://lichess.org/oauth?";
     let verifier: String = create_verifier();
     let challenge: String = create_challenge(&verifier);
     let mut final_url = Url::parse(url).unwrap();
     let queries = [
-        ("state", LOGIN_STATE),
+        ("state", login_state.as_str()),
         ("response_type", "code"),
         ("client_id", "abc"),
         (

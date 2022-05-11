@@ -36,17 +36,15 @@ async fn main() -> std::io::Result<()> {
     let (users, shuuro_games, news_) = get_cols(&db);
     let past_games = get_all(&shuuro_games).await;
     let lobby = Lobby::new(users, shuuro_games, news_)
-        .load_games(past_games)
-        .clone()
         .start();
     HttpServer::new(move || {
         let (users, shuuro_games, news_) = get_cols(&db);
         let key = read_key();
         App::new()
-            .data(Mutex::new(AppState::new(users, news_, shuuro_games)))
+            .data(Mutex::new(AppState::new(users, news_, shuuro_games, key.1)))
             .data(lobby.clone())
             .wrap(
-                RedisSession::new("127.0.0.1:6379", &key)
+                RedisSession::new("127.0.0.1:6379", &key.0)
                     .cookie_max_age(Some(Duration::days(365)))
                     .ttl(172800),
             )
