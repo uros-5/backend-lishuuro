@@ -1,4 +1,5 @@
 use actix::prelude::{Message, Recipient};
+use mongodb::Collection;
 
 use crate::models::model::{ActivePlayer, NewsItem, ShuuroGame};
 
@@ -66,6 +67,11 @@ impl GameMessage {
         let message_type = GameMessageType::start_all(games);
         Self { message_type }
     }
+
+    pub fn save_all() -> Self {
+        let message_type = GameMessageType::save_all();
+        Self { message_type }
+    }
 }
 
 pub enum GameMessageType {
@@ -75,18 +81,18 @@ pub enum GameMessageType {
         shuuro_game: ShuuroGame,
     },
     StartAll {
-        games: Vec<(String, ShuuroGame)>
+        games: Vec<(String, ShuuroGame)>,
     },
     TimeCheck {
-        game_id: String
+        game_id: String,
     },
     LostOnTime {
         game_id: String,
     },
     RemoveGame {
-        game_id: String
-    }
-    
+        game_id: String,
+    },
+    SaveAll,
 }
 
 impl GameMessageType {
@@ -103,33 +109,47 @@ impl GameMessageType {
     }
 
     pub fn time_check(game_id: &String) -> Self {
-        Self::TimeCheck { game_id: String::from(game_id) }
+        Self::TimeCheck {
+            game_id: String::from(game_id),
+        }
     }
 
     pub fn lost_on_time(game_id: &String) -> Self {
-        Self::LostOnTime { game_id: String::from(game_id) }
+        Self::LostOnTime {
+            game_id: String::from(game_id),
+        }
     }
 
     pub fn remove_game(game_id: &String) -> Self {
-        Self::RemoveGame { game_id: String::from(game_id) }
+        Self::RemoveGame {
+            game_id: String::from(game_id),
+        }
     }
 
     pub fn start_all(games: Vec<(String, ShuuroGame)>) -> Self {
         Self::StartAll { games }
     }
-}
 
+    pub fn save_all() -> Self {
+        Self::SaveAll
+    }
+}
 
 #[derive(Message)]
 #[rtype(result = "{}")]
 pub struct News {
     pub news: Vec<NewsItem>,
-    pub active_player: ActivePlayer
+    pub active_player: ActivePlayer,
 }
 impl News {
     pub fn news(active_player: ActivePlayer, news: Vec<NewsItem>) -> Self {
         Self {
-            news,active_player
+            news,
+            active_player,
         }
     }
 }
+
+#[derive(Message)]
+#[rtype(result = "(Vec<(String, ShuuroGame)>, Collection<ShuuroGame>)")]
+pub struct Games {}

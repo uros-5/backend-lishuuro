@@ -8,7 +8,6 @@ use std::sync::Mutex;
 use mongodb::{Collection, Database};
 use time::Duration;
 
-use crate::models::db_work::get_all;
 use actix_cors::Cors;
 use actix_redis::RedisSession;
 use actix_web::{web, App, HttpServer};
@@ -24,6 +23,8 @@ use websockets::{lobby::Lobby, start_connection::start_connection};
 
 use actix::prelude::Actor;
 
+use crate::models::db_work::save_state;
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     println!("http://localhost:8080/test");
@@ -34,10 +35,9 @@ async fn main() -> std::io::Result<()> {
     let client = Client::with_options(client_options).expect("client not found");
     let db = client.database("lishuuro");
     let (users, shuuro_games, news_) = get_cols(&db);
-    let past_games = get_all(&shuuro_games).await;
-    let lobby = Lobby::new(users, shuuro_games, news_)
-        .start();
-    HttpServer::new(move || {
+    let lobby = Lobby::new(users, shuuro_games, news_).start();
+    let temp_address = lobby.clone();
+    let s = HttpServer::new(move || {
         let (users, shuuro_games, news_) = get_cols(&db);
         let key = read_key();
         App::new()
@@ -59,7 +59,9 @@ async fn main() -> std::io::Result<()> {
     })
     .bind(("127.0.0.1", 8080))?
     .run()
-    .await
+    .await;
+    save_state(temp_address).await;
+    Ok(())
 }
 
 pub fn get_cors() -> Cors {

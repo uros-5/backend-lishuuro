@@ -9,8 +9,6 @@ use url::Url;
 
 use crate::lichess::model::{LoginData, PostLoginToken, Token};
 
-const LOGIN_STATE: &str = "_aXV20V_";
-
 fn sha256(buffer: String) -> GenericArray<u8, U32> {
     let mut hasher = Sha256::new();
     hasher.update(buffer.as_bytes());
@@ -56,6 +54,7 @@ pub fn login_url(login_state: &String) -> (Url, String) {
 
     (final_url, verifier)
 }
+
 pub fn random_username() -> String {
     format!(
         "Anon-{}",
@@ -72,21 +71,15 @@ pub async fn get_lichess_token(session: &Session, code: &str) -> Token {
     let body = PostLoginToken::new(code_verifier, code);
     let client = Client::default();
     let res = client.post(url).send_json(&body.to_json()).await;
-    match res {
-        Ok(mut i) => {
-            let json = i.json::<Token>().await;
-            match json {
-                Ok(tok) => {
-                    return tok;
-                }
-                Err(_) => {
-                    return Token::default();
-                }
-            }
-        }
-        Err(_) => {
+    if let Ok(mut i) = res {
+        let json = i.json::<Token>().await;
+        if let Ok(tok) = json {
+            return tok;
+        } else {
             return Token::default();
         }
+    } else {
+        return Token::default();
     }
 }
 
@@ -98,17 +91,11 @@ pub async fn get_lichess_user(token: String) -> String {
         .header("Authorization", format!("Bearer {}", token))
         .send()
         .await;
-    match res {
-        Ok(mut i) => {
-            let json = i.json::<LoginData>().await;
-            match json {
-                Ok(data) => {
-                    return String::from(data.username);
-                }
-                Err(_) => {}
-            }
+    if let Ok(mut i) = res {
+        let json = i.json::<LoginData>().await;
+        if let Ok(data) = json {
+            return String::from(data.username);
         }
-        Err(_) => {}
     }
     String::from("")
 }

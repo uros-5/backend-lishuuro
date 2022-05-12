@@ -21,7 +21,11 @@ struct Info {
     counter: u8,
 }
 
-pub async fn login(_: HttpRequest, session: Session, app_data: web::Data<Mutex<AppState>>) -> impl Responder {
+pub async fn login(
+    _: HttpRequest,
+    session: Session,
+    app_data: web::Data<Mutex<AppState>>,
+) -> impl Responder {
     let login_state = &app_data.lock().unwrap().login_state;
     let (lichess_url, verifier) = login_url(login_state);
     set_value(&session, "codeVerifier", &verifier).await;

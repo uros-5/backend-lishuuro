@@ -1,5 +1,5 @@
 use super::messages::{
-    Connect, Disconnect, GameMessage, GameMessageType, News, RegularMessage, WsMessage,
+    Connect, Disconnect, GameMessage, GameMessageType, Games, News, RegularMessage, WsMessage,
 };
 use crate::models::db_work::*;
 use crate::models::live_games::LiveGames;
@@ -9,13 +9,11 @@ use crate::models::model::{
 };
 use actix::dev::MessageResponse;
 use actix::prelude::{Actor, Context, Handler, Recipient};
-use actix::{AsyncContext, Addr};
+use actix::AsyncContext;
 use actix::WrapFuture;
 use mongodb::Collection;
 use serde_json;
 use std::collections::HashMap;
-use std::thread;
-use std::time::Duration;
 
 type Socket = Recipient<WsMessage>;
 
@@ -116,24 +114,23 @@ impl Lobby {
         }
         (false, 0)
     }
-
-    pub fn load_games(&mut self, games: Vec<(String, ShuuroGame)>) -> &mut Self {
-        //self.games.set_all(games);
-        self
-    }
 }
 
 impl Actor for Lobby {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Self::Context) {
-        let address = ctx.address().clone(); 
+        let address = ctx.address().clone();
         let db = self.db_shuuro_games.clone();
 
         tokio::spawn(async move {
-            let past_games = get_all(&db).await; 
+            let past_games = get_all(&db).await;
             address.do_send(GameMessage::start_all(past_games));
         });
+    }
+
+    fn stopped(&mut self, ctx: &mut Self::Context) {
+        println!("{}", self.active_players.len());
     }
 }
 
@@ -430,6 +427,7 @@ impl Handler<RegularMessage> for Lobby {
                                 }
                             }
                         } else if t == "save_to_db" {
+                            /*
                             if &msg.player.username() == "ADMIN" {
                                 res = serde_json::json!({"t": "live_restart"});
                                 let all = self.games.get_all();
@@ -438,6 +436,7 @@ impl Handler<RegularMessage> for Lobby {
                                 ctx.spawn(actor_future);
                                 return self.send_message_to_all(res);
                             }
+                            */
                         } else {
                             () //res = serde_json::json!({"t": "error"});
                         }
@@ -520,6 +519,7 @@ impl Handler<GameMessage> for Lobby {
                 users,
                 mut shuuro_game,
             } => {
+                println!("{}", &shuuro_game.ratings.len());
                 shuuro_game.game_id = game_id.clone();
                 self.add_spectator(users[0].as_str(), game_id.as_str());
                 self.add_spectator(users[1].as_str(), game_id.as_str());
@@ -535,9 +535,7 @@ impl Handler<GameMessage> for Lobby {
                 let time = self.games.time_ok(&game_id);
                 return time;
             }
-            GameMessageType::LostOnTime {
-                game_id,
-            } => {
+            GameMessageType::LostOnTime { game_id } => {
                 let self2 = self.clone();
                 let game = self.games.lost_on_time(&game_id);
                 if let Some(game) = game {
@@ -553,19 +551,19 @@ impl Handler<GameMessage> for Lobby {
                     return true;
                 }
                 return false;
-            },
-            GameMessageType::RemoveGame {
-                game_id 
-            } => {
-                    self.games.remove_game(&game_id);
-                    let res = serde_json::json!({"t": "active_games_count", "cnt": self.games.shuuro_games.len()});
-                    self.send_message_to_all(res);
-                    return true;
-            },
-            GameMessageType::StartAll {
-                games
-            } => {
+            }
+            GameMessageType::RemoveGame { game_id } => {
+                self.games.remove_game(&game_id);
+                let res = serde_json::json!({"t": "active_games_count", "cnt": self.games.shuuro_games.len()});
+                self.send_message_to_all(res);
+                return true;
+            }
+            GameMessageType::StartAll { games } => {
                 self.games.set_all(games, &ctx);
+                return true;
+            }
+            GameMessageType::SaveAll => {
+                println!("{}", self.games.len());
                 return true;
             }
         }
@@ -577,5 +575,26 @@ impl Handler<News> for Lobby {
     fn handle(&mut self, msg: News, ctx: &mut Self::Context) -> Self::Result {
         let res = serde_json::json!({"t": "home_news", "news": msg.news });
         self.send_message(&msg.active_player, res);
+    }
+}
+
+impl Handler<Games> for Lobby {
+    type Result = (Vec<(String, ShuuroGame)>, Collection<ShuuroGame>);
+    fn handle(&mut self, msg: Games, ctx: &mut Self::Context) -> Self::Result {
+        let a = self.games.get_all();
+        println!("{}", &a.len());
+        (a, self.db_shuuro_games.clone())
+    }
+}
+
+impl MessageResponse<Lobby, Games> for (Vec<(String, ShuuroGame)>, Collection<ShuuroGame>) {
+    fn handle<R: actix::dev::ResponseChannel<Games>>(
+        self,
+        ctx: &mut <Lobby as Actor>::Context,
+        tx: Option<R>,
+    ) {
+        if let Some(tx) = tx {
+            tx.send(self);
+        }
     }
 }

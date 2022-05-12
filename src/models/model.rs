@@ -182,6 +182,7 @@ impl ShuuroGame {
         game.black_clock = Duration::new(min_seconds, 0);
         game
     }
+    
     pub fn user_color(&self, username: &String) -> Color {
         if username == &self.white {
             Color::White
@@ -565,9 +566,9 @@ impl TimeControl {
 
     pub fn time_ok(&self, c: &String) -> bool {
         if self.stage == 0 {
-            if c == ""  {
+            if c == "" {
                 return (self.white_player - self.elapsed()).whole_milliseconds() > 0;
-            } 
+            }
         }
         if c == "w" {
             return (self.white_player - self.elapsed()).whole_milliseconds() > 0;

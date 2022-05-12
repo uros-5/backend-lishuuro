@@ -1,12 +1,15 @@
+use actix::AsyncContext;
 use actix::{Addr, Context};
 use serde_json::Value;
 use shuuro::{init, position::Outcome, Color, Move, PieceType, Position, Shop};
-use actix::AsyncContext;
 
 use crate::{models::model::ShuuroGame, websockets::lobby::Lobby};
 use std::collections::{HashMap, HashSet};
 
-use super::{model::{TimeControl, TvGame}, db_work::start_clock};
+use super::{
+    db_work::start_clock,
+    model::{TimeControl, TvGame},
+};
 
 #[derive(Clone)]
 pub struct LiveGames {
@@ -14,6 +17,10 @@ pub struct LiveGames {
 }
 
 impl LiveGames {
+    pub fn len(&self) -> usize {
+        self.shuuro_games.len()
+    }
+
     pub fn can_add(&self, username: &String) -> bool {
         for i in &self.shuuro_games {
             if i.1.can_add(&username) {
@@ -236,7 +243,7 @@ impl LiveGames {
         if let Some(g) = self.shuuro_games.get(game_id) {
             return g.time_ok();
         }
-        false 
+        false
     }
     pub fn lost_on_time(&mut self, game_id: &String) -> Option<&ShuuroGame> {
         let game = self.shuuro_games.get_mut(game_id);
@@ -313,8 +320,6 @@ impl ShuuroLive {
         self.spectators.remove(&String::from(username));
         self.spectators.len()
     }
-
-    
 
     pub fn confirmed_players(&self) -> [bool; 2] {
         [
@@ -609,8 +614,7 @@ impl ShuuroLive {
         println!("this is stm: {}", stm);
         if stm == "" {
             self.game.status = 5;
-        }
-        else {
+        } else {
             self.game.status = 8;
         }
         &self.game
@@ -624,6 +628,4 @@ impl ShuuroLive {
         }
         Color::NoColor
     }
-
-    
 }

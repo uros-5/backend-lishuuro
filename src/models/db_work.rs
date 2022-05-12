@@ -1,6 +1,6 @@
 use crate::websockets::lobby::Lobby;
-use crate::websockets::messages::{GameMessage, GameMessageType, News};
-use actix::prelude::{Context, Request};
+use crate::websockets::messages::{GameMessage, Games, News};
+use actix::prelude::Context;
 use actix::{Addr, AsyncContext};
 use bson::{doc, oid::ObjectId};
 use futures::stream::TryStreamExt;
@@ -9,7 +9,6 @@ use glicko2::{new_rating, GameResult, GlickoRating};
 use mongodb::Collection;
 use std::collections::HashMap;
 use std::str::FromStr;
-use std::thread;
 use std::time::Duration;
 
 use super::model::{ActivePlayer, NewsItem, PlayerMatch, ShuuroGame, User};
@@ -86,22 +85,6 @@ pub fn get_all(db: &Collection<ShuuroGame>) -> impl Future<Output = Vec<(String,
             }
         }
         return hm;
-    });
-    b
-}
-
-pub fn update_all(s: &Lobby, all: Vec<(String, ShuuroGame)>) -> impl Future<Output = ()> {
-    let s = s.clone();
-    let all = all.clone();
-    let b = Box::pin(async move {
-        for i in all {
-            let filter = doc! {"_id": ObjectId::from_str(i.0.as_str()).unwrap()};
-            let update = doc! {"$set": bson::to_bson(&i.1).unwrap()};
-            let game1 = s.db_shuuro_games.find_one_and_update(filter, update, None);
-            match game1.await {
-                _g => {}
-            };
-        }
     });
     b
 }
@@ -186,6 +169,9 @@ pub fn new_game<'a>(
                 }
                 let id = g.ok().unwrap().inserted_id.to_string();
                 let game_id = oid(id);
+                let filter = doc!{"_id": ObjectId::from_str(&game_id).unwrap()};
+                let update = doc!{"$set": bson::to_bson(&shuuro_game).unwrap()};
+                shuuro_games.update_one(filter, update, None).await;
                 ctx.do_send(GameMessage::new_adding_game(
                     game_id.clone(),
                     users.clone(),
@@ -238,7 +224,6 @@ pub fn start_clock(ctx: Addr<Lobby>, game_id: &String) {
             let time = ctx.send(GameMessage::time_check(&game_id)).await;
             if let Ok(time) = time {
                 if !time {
-                    println!("lost on time");
                     ctx.send(GameMessage::lost_on_time(&game_id)).await;
                     ctx.send(GameMessage::remove_game(&game_id)).await;
                     break;
@@ -249,4 +234,22 @@ pub fn start_clock(ctx: Addr<Lobby>, game_id: &String) {
             }
         }
     });
+}
+
+pub async fn save_state(address: Addr<Lobby>) {
+    let games = address.send(Games {}).await;
+    if let Ok(res) = games {
+        update_all(res.0, res.1).await;
+    }
+}
+
+pub async fn update_all(all: Vec<(String, ShuuroGame)>, db: Collection<ShuuroGame>) {
+    for i in all {
+        let filter = doc! {"_id": ObjectId::from_str(i.0.as_str()).unwrap()};
+        let update = doc! {"$set": bson::to_bson(&i.1).unwrap()};
+        let game1 = db.find_one_and_update(filter, update, None);
+        match game1.await {
+            _g => {}
+        };
+    }
 }
