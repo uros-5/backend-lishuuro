@@ -235,11 +235,11 @@ impl LiveGames {
         games
     }
 
-    pub fn time_ok(&self, game_id: &str) -> bool {
+    pub fn time_ok(&self, game_id: &str) -> Option<bool> {
         if let Some(g) = self.shuuro_games.get(game_id) {
-            return g.time_ok();
+            return Some(g.time_ok());
         }
-        false
+        None 
     }
     pub fn lost_on_time(&mut self, game_id: &String) -> Option<&ShuuroGame> {
         let game = self.shuuro_games.get_mut(game_id);
@@ -274,13 +274,14 @@ pub struct ShuuroLive {
 
 impl From<&ShuuroGame> for ShuuroLive {
     fn from(game: &ShuuroGame) -> Self {
+        let time_control = TimeControl::from(game);
         ShuuroLive {
             game: game.clone(),
             shop: Shop::default(),
             deploy: Position::default(),
             fight: Position::default(),
             running: true,
-            time_control: TimeControl::new(game.incr.whole_seconds(), game.min.whole_seconds()),
+            time_control, 
             draws: [false, false],
             spectators: HashSet::new(),
         }

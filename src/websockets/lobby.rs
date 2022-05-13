@@ -107,7 +107,6 @@ impl Lobby {
             .insert(String::from(username), String::from(game_id));
         {
             if game_id != String::from("") {
-                println!("{}", game_id);
                 let game_id = String::from(game_id);
                 let count = self.games.add_spectator(&game_id, &username);
                 let msg = spec_cnt!(game_id, count);
@@ -486,7 +485,7 @@ impl Handler<Disconnect> for Lobby {
 }
 
 impl Handler<GameMessage> for Lobby {
-    type Result = bool;
+    type Result = Option<bool>;
 
     fn handle(&mut self, msg: GameMessage, ctx: &mut Context<Self>) -> Self::Result {
         match msg.message_type {
@@ -504,11 +503,11 @@ impl Handler<GameMessage> for Lobby {
                 let res = cnt!("active_games_count", self.games.shuuro_games);
                 self.send_message_to_all(res);
                 self.chat.add_room(game_id);
-                return true;
+                return Some(true);
             }
             GameMessageType::TimeCheck { game_id } => {
                 let time = self.games.time_ok(&game_id);
-                return time;
+                return time; 
             }
             GameMessageType::LostOnTime { game_id } => {
                 let self2 = self.clone();
@@ -523,19 +522,19 @@ impl Handler<GameMessage> for Lobby {
                     let tv_res = serde_json::json!({"t": "live_game_end", "game_id": &game_id});
                     self.send_message_to_spectators(&game_id, &res_specs);
                     self.send_message_to_tv(&tv_res);
-                    return true;
+                    return Some(true);
                 }
-                return false;
+                return Some(false);
             }
             GameMessageType::RemoveGame { game_id } => {
                 self.games.remove_game(&game_id);
                 let res = cnt!("active_games_count", self.games.shuuro_games);
                 self.send_message_to_all(res);
-                return true;
+                return Some(true);
             }
             GameMessageType::StartAll { games } => {
                 self.games.set_all(games, &ctx);
-                return true;
+                return Some(true);
             }
         }
     }
@@ -551,9 +550,8 @@ impl Handler<News> for Lobby {
 
 impl Handler<Games> for Lobby {
     type Result = (Vec<(String, ShuuroGame)>, Collection<ShuuroGame>);
-    fn handle(&mut self, msg: Games, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, _msg: Games, _ctx: &mut Self::Context) -> Self::Result {
         let a = self.games.get_all();
-        println!("{}", &a.len());
         (a, self.db_shuuro_games.clone())
     }
 }
@@ -561,7 +559,7 @@ impl Handler<Games> for Lobby {
 impl MessageResponse<Lobby, Games> for (Vec<(String, ShuuroGame)>, Collection<ShuuroGame>) {
     fn handle<R: actix::dev::ResponseChannel<Games>>(
         self,
-        ctx: &mut <Lobby as Actor>::Context,
+        _ctx: &mut <Lobby as Actor>::Context,
         tx: Option<R>,
     ) {
         if let Some(tx) = tx {

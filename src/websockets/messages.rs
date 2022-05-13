@@ -38,7 +38,7 @@ pub struct Disconnect {
 }
 
 #[derive(Message)]
-#[rtype(result = "bool")]
+#[rtype(result = "Option<bool>")]
 pub struct GameMessage {
     pub message_type: GameMessageType,
 }

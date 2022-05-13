@@ -607,6 +607,23 @@ impl TimeControl {
     fn elapsed(&self) -> Duration {
         OffsetDateTime::now_utc() - self.last_click
     }
+
+    
+}
+
+impl From<&ShuuroGame> for TimeControl {
+    fn from(game: &ShuuroGame) -> Self {
+        let inc = game.incr.whole_seconds();
+        let duration = game.min.whole_seconds();
+        let white = game.white_clock;
+        let black = game.black_clock;
+        let last_click = game.last_clock;
+        let mut tc = Self::new(inc, duration);
+        tc.white_player = white;
+        tc.black_player = black;
+        tc.last_click = last_click;
+        tc
+    }
 }
 
 fn date_str<S>(x: &OffsetDateTime, s: S) -> Result<S::Ok, S::Error>

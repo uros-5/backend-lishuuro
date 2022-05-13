@@ -174,7 +174,6 @@ pub fn new_game<'a>(
                     users.clone(),
                     shuuro_game,
                 ));
-                start_clock(ctx, &game_id);
             }
         }
     });
@@ -220,10 +219,12 @@ pub fn start_clock(ctx: Addr<Lobby>, game_id: &String) {
             interval.tick().await;
             let time = ctx.send(GameMessage::time_check(&game_id)).await;
             if let Ok(time) = time {
-                if !time {
-                    ctx.send(GameMessage::lost_on_time(&game_id)).await;
-                    ctx.send(GameMessage::remove_game(&game_id)).await;
-                    break;
+                if let Some(time) = time {
+                    if !time {
+                        ctx.send(GameMessage::lost_on_time(&game_id)).await;
+                        ctx.send(GameMessage::remove_game(&game_id)).await;
+                        break;
+                    }
                 }
             } else {
                 break;
@@ -237,7 +238,6 @@ pub async fn save_state(address: Addr<Lobby>) {
     if let Ok(res) = games {
         update_all(res.0, res.1).await;
     }
-    
 }
 
 pub async fn update_all(all: Vec<(String, ShuuroGame)>, db: Collection<ShuuroGame>) {
