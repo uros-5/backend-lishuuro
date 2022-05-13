@@ -32,6 +32,7 @@ pub fn create_challenge(verifier: &String) -> String {
     base64_encode(sha256(verifier.clone()))
 }
 
+/// Start of login process.
 pub fn login_url(login_state: &String) -> (Url, String) {
     let url = "https://lichess.org/oauth?";
     let verifier: String = create_verifier();
@@ -55,6 +56,7 @@ pub fn login_url(login_state: &String) -> (Url, String) {
     (final_url, verifier)
 }
 
+/// If anon then generate random username.
 pub fn random_username() -> String {
     format!(
         "Anon-{}",
@@ -65,6 +67,7 @@ pub fn random_username() -> String {
     )
 }
 
+/// Getting lichess token.
 pub async fn get_lichess_token(session: &Session, code: &str) -> Token {
     let url = "https://lichess.org/api/token";
     let code_verifier = session.get::<String>("codeVerifier").ok().unwrap().unwrap();
@@ -75,14 +78,12 @@ pub async fn get_lichess_token(session: &Session, code: &str) -> Token {
         let json = i.json::<Token>().await;
         if let Ok(tok) = json {
             return tok;
-        } else {
-            return Token::default();
         }
-    } else {
-        return Token::default();
     }
+    return Token::default();
 }
 
+/// If user exist then we have login data.
 pub async fn get_lichess_user(token: String) -> String {
     let url = "https://lichess.org/api/account";
     let client = Client::default();

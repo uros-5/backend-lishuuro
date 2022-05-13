@@ -42,6 +42,8 @@ impl AppState {
 }
 
 // MONGODB MODELS
+
+/// Representing user in database.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct User {
     pub _id: String,
@@ -76,6 +78,7 @@ impl User {
     }
 }
 
+/// Model used for user recent results.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PlayerMatch {
     pub r: f64,
@@ -107,6 +110,7 @@ impl From<&PlayerMatch> for GameResult {
     }
 }
 
+/// ShuuroGame representation in database.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShuuroGame {
     pub _id: ObjectId,
@@ -182,7 +186,8 @@ impl ShuuroGame {
         game.black_clock = Duration::new(min_seconds, 0);
         game
     }
-    
+
+    /// Return Color::NoColor if user does not exist.
     pub fn user_color(&self, username: &String) -> Color {
         if username == &self.white {
             Color::White
@@ -193,6 +198,7 @@ impl ShuuroGame {
         }
     }
 
+    /// Get ratings from db and updates here.
     pub fn update_ratings(&mut self, ratings: HashMap<String, [f64; 2]>) {
         self.ratings = ratings;
     }
@@ -204,7 +210,20 @@ impl From<&LobbyGame> for ShuuroGame {
     }
 }
 
-// WebSockets
+/// NewsItem for main page.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct NewsItem {
+    pub _id: ObjectId,
+    pub title: String,
+    pub user: String,
+    pub date: String,
+    pub category: String,
+    pub text: String,
+    pub headline: String,
+}
+
+// WEBSOCKETS
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ChatItem {
     pub id: String,
@@ -215,14 +234,17 @@ pub struct ChatItem {
 
 impl ChatItem {
     pub fn date(&self) -> String {
-        self.time.clone()
+        String::from(&self.time)
     }
+
+    /// Formats date in format HH:MM
     pub fn update(&mut self, user: &String) {
         let now = OffsetDateTime::now_utc();
-        self.user = user.clone();
+        self.user = String::from(user);
         self.time = format!("{}:{}", now.hour(), now.minute());
     }
 
+    /// Formats ChatItem for json response.
     pub fn response(&mut self) -> Value {
         let mut first = serde_json::json!(&mut self.clone());
         let second = json!({ "t": "live_chat_message" });
@@ -237,6 +259,7 @@ pub struct ChatRooms {
 }
 
 impl ChatRooms {
+    /// Creates ChatRooms, with already inserted "home"
     pub fn new() -> Self {
         let mut rooms = HashMap::default();
         rooms.insert(String::from("home"), vec![]);
@@ -244,6 +267,7 @@ impl ChatRooms {
         room
     }
 
+    /// Check if user can add new message.
     pub fn can_add(chat: &Vec<ChatItem>, player: &ActivePlayer) -> bool {
         let count = chat.iter().fold(0, |mut acc, x| {
             if &x.user == &player.username() {
@@ -261,6 +285,7 @@ impl ChatRooms {
         true
     }
 
+    /// Check if message length is in valid range
     pub fn message_length(m: &ChatItem) -> bool {
         if m.message.len() > 0 && m.message.len() < 50 {
             return true;
@@ -268,6 +293,7 @@ impl ChatRooms {
         false
     }
 
+    /// Add new message, before checking out
     pub fn add_msg(
         &mut self,
         id: &String,
@@ -288,6 +314,7 @@ impl ChatRooms {
         None
     }
 
+    /// Returns entire chat room
     pub fn chat(&self, id: &String) -> Option<&Vec<ChatItem>> {
         if let Some(chat) = self.rooms.get(id) {
             return Some(chat);
@@ -295,6 +322,7 @@ impl ChatRooms {
         None
     }
 
+    /// Insert new room
     pub fn add_room(&mut self, id: String) {
         self.rooms.insert(id, vec![]);
     }
@@ -349,6 +377,7 @@ pub struct LobbyGame {
 }
 
 impl LobbyGame {
+    /// Return true if game has valid time.
     pub fn is_valid(&self) -> bool {
         if VARIANTS.contains(&&self.variant[..]) {
             if DURATION_RANGE.contains(&self.time) {
@@ -362,6 +391,7 @@ impl LobbyGame {
         false
     }
 
+    /// Formats game for json response.
     pub fn response(&mut self, t: &String) -> Value {
         let mut first = serde_json::json!(&mut self.clone());
         let second = json!({ "t": t });
@@ -370,32 +400,41 @@ impl LobbyGame {
         first
     }
 
+    /// Return id for game
     pub fn username(&self) -> String {
-        self.username.clone()
+        String::from(&self.username)
     }
 
-    pub fn colors(&mut self, accepting_player: &String) -> [String; 2] {
+    /// Returns player colors
+    pub fn colors(&mut self, other: &String) -> [String; 2] {
         let mut c_s: [String; 2] = [String::from(""), String::from("")];
-        let mut temp_color = self.color.clone();
-        if temp_color == String::from("random") {
-            if rand::random() {
-                temp_color = String::from("white");
-            } else {
-                temp_color = String::from("black");
-            }
+        let mut color = String::from(self.color());
+        let other = String::from(other);
+        let me = self.username();
+        if color == "random" {
+            color = self.random_color();
         }
-        if temp_color == String::from("white") {
-            c_s = [self.username(), accepting_player.clone()];
+        if color == "white" {
+            c_s = [me, other];
         }
         // this is black
         else {
-            c_s = [accepting_player.clone(), self.username()];
+            c_s = [other, me];
         }
         c_s
     }
 
+    /// 
     pub fn color(&self) -> &String {
         &self.color
+    }
+
+    fn random_color(&self)-> String {
+        if rand::random() {
+            String::from("white")
+        } else {
+            String::from("black")
+        }
     }
 }
 
@@ -403,33 +442,6 @@ impl PartialEq for LobbyGame {
     fn eq(&self, other: &LobbyGame) -> bool {
         self.username == other.username
     }
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct GameRequest {
-    pub t: String,
-    pub color: String,
-    pub game_id: String,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct GameMove {
-    pub t: String,
-    pub game_id: String,
-    pub game_move: String,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct GameGetHand {
-    pub t: String,
-    pub game_id: String,
-    pub color: String,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct GameGetConfirmed {
-    pub t: String,
-    pub game_id: String,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -597,17 +609,6 @@ impl TimeControl {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct NewsItem {
-    pub _id: ObjectId,
-    pub title: String,
-    pub user: String,
-    pub date: String,
-    pub category: String,
-    pub text: String,
-    pub headline: String,
-}
-
 fn date_str<S>(x: &OffsetDateTime, s: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
@@ -630,8 +631,7 @@ where
             //return Ok(i);
             return Ok(d.assume_utc());
         }
-        Err(e) => {
-            println!("{}", e);
+        Err(_e) => {
             return Ok(OffsetDateTime::now_utc());
         }
     }

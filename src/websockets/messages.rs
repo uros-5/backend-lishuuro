@@ -1,5 +1,6 @@
 use actix::prelude::{Message, Recipient};
 use mongodb::Collection;
+use serde::{Serialize, Deserialize};
 
 use crate::models::model::{ActivePlayer, NewsItem, ShuuroGame};
 
@@ -68,10 +69,6 @@ impl GameMessage {
         Self { message_type }
     }
 
-    pub fn save_all() -> Self {
-        let message_type = GameMessageType::save_all();
-        Self { message_type }
-    }
 }
 
 pub enum GameMessageType {
@@ -92,7 +89,6 @@ pub enum GameMessageType {
     RemoveGame {
         game_id: String,
     },
-    SaveAll,
 }
 
 impl GameMessageType {
@@ -129,10 +125,6 @@ impl GameMessageType {
     pub fn start_all(games: Vec<(String, ShuuroGame)>) -> Self {
         Self::StartAll { games }
     }
-
-    pub fn save_all() -> Self {
-        Self::SaveAll
-    }
 }
 
 #[derive(Message)]
@@ -153,3 +145,5 @@ impl News {
 #[derive(Message)]
 #[rtype(result = "(Vec<(String, ShuuroGame)>, Collection<ShuuroGame>)")]
 pub struct Games {}
+
+

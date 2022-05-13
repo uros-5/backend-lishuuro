@@ -101,7 +101,6 @@ pub async fn news(
             }
         }
         Err(_e) => {
-            println!("{}", _e);
         }
     }
     web::Json(json!({"exist": false}))

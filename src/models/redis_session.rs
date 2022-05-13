@@ -8,8 +8,7 @@ use serde::Serialize;
 use std::sync::Mutex;
 
 pub async fn set_value<T: Serialize>(session: &Session, key: &str, value: &T) {
-    if let Err(e) = session.set(key, value) {
-        println!("{}", &e);
+    if let Err(_e) = session.set(key, value) {
     }
 }
 

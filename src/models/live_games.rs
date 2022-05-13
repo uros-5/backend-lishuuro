@@ -108,7 +108,6 @@ impl LiveGames {
                 g.running = false;
             }
             None => {
-                println!("game not found");
             }
         }
     }
@@ -121,7 +120,6 @@ impl LiveGames {
                 g.buy(game_move, username);
             }
             None => {
-                println!("game not found")
             }
         }
     }
@@ -131,7 +129,6 @@ impl LiveGames {
         match game {
             Some(g) => return g.place(game_move, username),
             None => {
-                println!("game not found")
             }
         }
         None
@@ -142,7 +139,6 @@ impl LiveGames {
         match game {
             Some(g) => return g.play(game_move, username),
             None => {
-                println!("game not found")
             }
         }
         None
@@ -611,7 +607,6 @@ impl ShuuroLive {
 
     pub fn lost_on_time(&mut self, stm: &String) -> &ShuuroGame {
         self.game.result = String::from(stm);
-        println!("this is stm: {}", stm);
         if stm == "" {
             self.game.status = 5;
         } else {

@@ -4,9 +4,9 @@ use super::messages::{
 use crate::models::db_work::*;
 use crate::models::live_games::LiveGames;
 use crate::models::model::{
-    ActivePlayer, ChatItem, ChatRooms, GameGetConfirmed, GameGetHand, GameMove, GameRequest,
-    LobbyGame, LobbyGames, NewsItem, ShuuroGame, User,
+    ActivePlayer, ChatItem, ChatRooms, LobbyGame, LobbyGames, NewsItem, ShuuroGame, User,
 };
+use crate::websockets::client_messages::{GameGet, GameGetHand, GameMove, GameRequest};
 use actix::dev::MessageResponse;
 use actix::prelude::{Actor, Context, Handler, Recipient};
 use actix::AsyncContext;
@@ -15,12 +15,26 @@ use mongodb::Collection;
 use serde_json;
 use std::collections::HashMap;
 
+// MACROS
+
+/// Count items in vec.
+macro_rules! cnt  {
+    ($t: expr, $l: expr) => {
+       serde_json::json!({"t": $t, "cnt": $l.len()})
+    };
+}
+
+macro_rules! spec_cnt  {
+    ($id: expr, $cnt: expr) => {
+        serde_json::json!({"t": "live_game_spectators_count", "game_id": $id, "count": $cnt});
+    };
+}
+
 type Socket = Recipient<WsMessage>;
 
 #[derive(Clone)]
 pub struct Lobby {
-    pub chat: Vec<ChatItem>,
-    pub chat2: ChatRooms,
+    pub chat: ChatRooms,
     pub active_players: HashMap<ActivePlayer, Socket>,
     pub spectators: HashMap<String, String>,
     pub games: LiveGames,
@@ -38,8 +52,7 @@ impl Lobby {
         news: Collection<NewsItem>,
     ) -> Self {
         Lobby {
-            chat: vec![],
-            chat2: ChatRooms::new(),
+            chat: ChatRooms::new(),
             active_players: HashMap::new(),
             games: LiveGames::default(),
             lobby: LobbyGames::default(),
@@ -60,7 +73,7 @@ impl Lobby {
 
     pub fn send_message_to_all(&self, message: serde_json::Value) {
         for user in self.active_players.iter() {
-            user.1.do_send(WsMessage(message.to_owned().to_string()));
+            let _ = user.1.do_send(WsMessage(message.to_owned().to_string()));
         }
     }
 
@@ -68,32 +81,22 @@ impl Lobby {
         if let Some(spectators) = self.games.spectators(game_id) {
             for i in spectators.iter() {
                 if let Some(user) = self.active_players.get(&ActivePlayer::new(&true, &i)) {
-                    user.do_send(WsMessage(message.to_owned().to_string()));
+                    let _ = user.do_send(WsMessage(message.to_owned().to_string()));
                 }
             }
         }
     }
 
     pub fn send_message_to_tv(&self, message: &serde_json::Value) {
-        for (_i, s) in self.spectators.iter().enumerate() {
-            if s.1 == "tv" {
-                if let Some(user) = self.active_players.get(&ActivePlayer::new(&false, s.0)) {
-                    let message = serde_json::json!({"t": "tv_game_update", "g": message});
-                    user.do_send(WsMessage(message.to_owned().to_string()));
-                }
-            }
-        }
+        let message = serde_json::json!({"t": "tv_game_update", "g": message});
+        self.send_message_to_spectators(&String::from("tv"), &message);
     }
 
     pub fn send_message_to_selected(&self, message: serde_json::Value, users: [String; 2]) {
-        let mut counter = 0;
-        for user in self.active_players.iter() {
-            if users.contains(&&user.0.username()) {
-                user.1.do_send(WsMessage(message.to_owned().to_string()));
-                counter += 1;
-                if counter == 2 {
-                    break;
-                }
+        for i in users {
+            let player = ActivePlayer::new(&false, &i);
+            if let Some(user) = self.active_players.get(&player) {
+                let _ = user.do_send(WsMessage(message.to_owned().to_string()));
             }
         }
     }
@@ -107,7 +110,7 @@ impl Lobby {
         if let Some(game_id) = self.spectators.remove(&String::from(username)) {
             if game_id != String::from("") {
                 let count = self.games.remove_spectator(&game_id, username);
-                let msg = serde_json::json!({"t": "live_game_spectators_count", "game_id": &game_id, "count": count});
+                let msg = spec_cnt!(&game_id, count);
                 self.send_message_to_spectators(&game_id, &msg);
                 return (true, count);
             }
@@ -128,326 +131,309 @@ impl Actor for Lobby {
             address.do_send(GameMessage::start_all(past_games));
         });
     }
-
-    fn stopped(&mut self, ctx: &mut Self::Context) {
-        println!("{}", self.active_players.len());
-    }
 }
 
 impl Handler<RegularMessage> for Lobby {
     type Result = ();
-    //type Result = Future;
     fn handle(&mut self, msg: RegularMessage, ctx: &mut Context<Self>) -> Self::Result {
         let data = serde_json::from_str::<serde_json::Value>(&msg.text);
         let mut res: serde_json::Value = serde_json::json!({"t": "error"});
-        match data {
-            Ok(i) => {
-                let data_type = &i["t"];
-                match data_type {
-                    serde_json::Value::String(t) => {
-                        if t == "live_chat_full" {
-                            let m = serde_json::from_str::<GameGetConfirmed>(&msg.text);
-                            if let Ok(m) = m {
-                                if let Some(chat) = self.chat2.chat(&m.game_id) {
-                                    res = serde_json::json!({"t": t, "id": &m.game_id, "lines": chat});
-                                    return self.send_message(&msg.player, res);
-                                }
+        if let Ok(i) = data {
+            let data_type = &i["t"];
+            match data_type {
+                serde_json::Value::String(t) => {
+                    if t == "live_chat_full" {
+                        let m = serde_json::from_str::<GameGet>(&msg.text);
+                        if let Ok(m) = m {
+                            if let Some(chat) = self.chat.chat(&m.game_id) {
+                                res = serde_json::json!({"t": t, "id": &m.game_id, "lines": chat});
+                                return self.send_message(&msg.player, res);
                             }
-                        } else if t == "active_players_count" {
-                            res = serde_json::json!({"t": t, "cnt": self.active_players.len()});
-                        } else if t == "active_games_count" {
-                            res = serde_json::json!({"t": t, "cnt": self.games.shuuro_games.len()});
-                        } else if t == "live_tv" {
-                            res = serde_json::json!({"t": t, "games": self.games.get_tv()});
-                            self.add_spectator(&msg.player.username(), "tv");
-                        } else if t == "live_game_remove_spectator" {
-                            let m = serde_json::from_str::<GameGetConfirmed>(&msg.text);
-                            if let Ok(m) = m {
-                                self.remove_spectator(&msg.player.username());
-                                let count = self
-                                    .games
-                                    .remove_spectator(&m.game_id, &msg.player.username());
-                                let res = serde_json::json!({"t": "live_game_spectators_count",
+                        }
+                    } else if t == "active_players_count" {
+                        res = cnt!(t, self.active_players);
+                    } else if t == "active_games_count" {
+                        res = cnt!(t, self.games.shuuro_games);
+                    } else if t == "live_tv" {
+                        res = serde_json::json!({"t": t, "games": self.games.get_tv()});
+                        self.add_spectator(&msg.player.username(), "tv");
+                    } else if t == "live_game_remove_spectator" {
+                        let m = serde_json::from_str::<GameGet>(&msg.text);
+                        if let Ok(m) = m {
+                            self.remove_spectator(&msg.player.username());
+                            let count = self
+                                .games
+                                .remove_spectator(&m.game_id, &msg.player.username());
+                            let res = serde_json::json!({"t": "live_game_spectators_count",
                                     "game_id": &m.game_id,
                                     "count": count});
-                                return self.send_message_to_spectators(&m.game_id, &res);
-                            }
-                        } else if t == "home_news" {
-                            let b = get_home_news(&ctx, &self.news, &msg.player);
-                            let actor_future = b.into_actor(self);
-                            ctx.spawn(actor_future);
-                        } else if t == "live_game_start" {
-                            let m = serde_json::from_str::<GameRequest>(&msg.text);
-                            if let Ok(m) = m {
-                                let game = self.games.get_game(&m.game_id);
-                                match game {
-                                    Some(g) => {
-                                        res = serde_json::json!({"t": "live_game_start", "game_id": &g.0, "game_info": &g.1});
-                                        let spectators = self
-                                            .games
-                                            .add_spectator(&g.0, &msg.player.username().as_str());
-                                        self.add_spectator(
-                                            &msg.player.username().as_str(),
-                                            &g.0.as_str(),
-                                        );
-                                        self.send_message(&msg.player, res);
-                                        let res_s = serde_json::json!({"t": "live_game_spectators_count", "game_id": &m.game_id, "count": spectators});
-                                        return self.send_message_to_spectators(&m.game_id, &res_s);
-                                    }
-                                    None => {
-                                        let self2 = self.clone();
-                                        let game_id = m.game_id.clone();
-                                        let player = msg.player.clone();
-                                        let b = get_game(&self2, game_id, player);
-                                        let actor_future = b.into_actor(self);
-                                        ctx.spawn(actor_future);
-                                        return ();
-                                    }
+                            return self.send_message_to_spectators(&m.game_id, &res);
+                        }
+                    } else if t == "home_news" {
+                        let b = get_home_news(&ctx, &self.news, &msg.player);
+                        let actor_future = b.into_actor(self);
+                        ctx.spawn(actor_future);
+                    } else if t == "live_game_start" {
+                        let m = serde_json::from_str::<GameRequest>(&msg.text);
+                        if let Ok(m) = m {
+                            let game = self.games.get_game(&m.game_id);
+                            match game {
+                                Some(g) => {
+                                    res = serde_json::json!({"t": "live_game_start", "game_id": &g.0, "game_info": &g.1});
+                                    let count = self
+                                        .games
+                                        .add_spectator(&g.0, &msg.player.username().as_str());
+                                    self.add_spectator(
+                                        &msg.player.username().as_str(),
+                                        &g.0.as_str(),
+                                    );
+                                    self.send_message(&msg.player, res);
+                                    let res_s = spec_cnt!(&m.game_id, count);
+                                    return self.send_message_to_spectators(&m.game_id, &res_s);
+                                }
+                                None => {
+                                    let self2 = self.clone();
+                                    let game_id = m.game_id.clone();
+                                    let player = msg.player.clone();
+                                    let b = get_game(&self2, game_id, player);
+                                    let actor_future = b.into_actor(self);
+                                    ctx.spawn(actor_future);
+                                    return ();
                                 }
                             }
-                        } else if t == "live_game_sfen" {
-                            let m = serde_json::from_str::<GameGetConfirmed>(&msg.text);
-                            if let Ok(m) = m {
-                                if let Some(g) = self.games.get_game(&m.game_id) {
-                                    if &g.1.current_stage != &0 {
-                                        res = serde_json::json!({"t": t, "game_id": &g.0, "fen": g.1.sfen, "current_stage": &g.1.current_stage })
-                                    }
+                        }
+                    } else if t == "live_game_sfen" {
+                        let m = serde_json::from_str::<GameGet>(&msg.text);
+                        if let Ok(m) = m {
+                            if let Some(g) = self.games.get_game(&m.game_id) {
+                                if &g.1.current_stage != &0 {
+                                    res = serde_json::json!({"t": t, "game_id": &g.0, "fen": g.1.sfen, "current_stage": &g.1.current_stage })
                                 }
                             }
-                        } else if t == "live_game_buy" || t == "live_game_confirm" {
-                            let m = serde_json::from_str::<GameMove>(&msg.text);
-                            if let Ok(m) = m {
+                        }
+                    } else if t == "live_game_buy" || t == "live_game_confirm" {
+                        let m = serde_json::from_str::<GameMove>(&msg.text);
+                        if let Ok(m) = m {
+                            self.games
+                                .buy(&m.game_id, m.game_move, &msg.player.username());
+                            // if both sides are confirmed then notify them and redirect players.
+                            if !self.games.confirmed_players(&m.game_id).contains(&false) {
+                                res = self.games.set_deploy(&m.game_id);
+                                let res2 = serde_json::json!({"t": "pause_confirmed", "confirmed": &self.games.confirmed_players(&m.game_id)});
+                                self.send_message_to_spectators(&m.game_id, &res2);
+                                self.send_message_to_spectators(&m.game_id, &res);
+                                return ();
+                            } else if t == "live_game_confirm" {
+                                res = serde_json::json!({"t": "pause_confirmed", "confirmed": &self.games.confirmed_players(&m.game_id)});
+
+                                self.send_message_to_spectators(&m.game_id, &res.clone());
+                            } else {
+                                return ();
+                            }
+                        }
+                    } else if t == "live_game_place" {
+                        let m = serde_json::from_str::<GameMove>(&msg.text);
+                        if let Ok(m) = m {
+                            let placed =
                                 self.games
-                                    .buy(&m.game_id, m.game_move, &msg.player.username());
-                                // if both sides are confirmed then notify them and redirect players.
-                                if !self.games.confirmed_players(&m.game_id).contains(&false) {
-                                    res = self.games.set_deploy(&m.game_id);
-                                    let res2 = serde_json::json!({"t": "pause_confirmed", "confirmed": &self.games.confirmed_players(&m.game_id)});
-                                    self.send_message_to_spectators(&m.game_id, &res2);
-                                    self.send_message_to_spectators(&m.game_id, &res);
-                                    return ();
-                                } else if t == "live_game_confirm" {
-                                    res = serde_json::json!({"t": "pause_confirmed", "confirmed": &self.games.confirmed_players(&m.game_id)});
+                                    .place(&m.game_id, m.game_move, &msg.player.username());
+                            if let Some(mut placed) = placed {
+                                *placed.get_mut("game_id").unwrap() = serde_json::json!(m.game_id);
 
-                                    self.send_message_to_spectators(&m.game_id, &res.clone());
-                                } else {
-                                    return ();
-                                }
-                            }
-                        } else if t == "live_game_place" {
-                            let m = serde_json::from_str::<GameMove>(&msg.text);
-                            if let Ok(m) = m {
-                                let placed = self.games.place(
-                                    &m.game_id,
-                                    m.game_move,
-                                    &msg.player.username(),
-                                );
-                                if let Some(mut placed) = placed {
-                                    *placed.get_mut("game_id").unwrap() =
-                                        serde_json::json!(m.game_id);
-
-                                    self.send_message_to_spectators(&m.game_id, &placed);
-                                    self.send_message_to_tv(&placed);
-                                    //tv
-                                    if placed.get("first_move_error").unwrap()
-                                        == &serde_json::json!(true)
-                                    {
-                                        let game = self.games.get_game(&m.game_id).unwrap().1;
-                                        let b = update_entire_game(&self, &m.game_id, &game, true);
-                                        let actor_future = b.into_actor(self);
-                                        ctx.spawn(actor_future);
-                                        self.games.remove_game(&m.game_id);
-                                        res = serde_json::json!({"t": "active_games_count", "cnt": self.games.shuuro_games.len()});
-                                        let tv_res = serde_json::json!({"t": "live_game_end", "game_id": &m.game_id});
-                                        self.send_message_to_tv(&tv_res);
-                                        return self.send_message_to_all(res);
-                                    }
-                                    return ();
-                                }
-                            }
-                        } else if t == "live_game_play" {
-                            let m = serde_json::from_str::<GameMove>(&msg.text);
-                            if let Ok(m) = m {
-                                let played = self.games.play(
-                                    &m.game_id,
-                                    m.game_move,
-                                    &msg.player.username(),
-                                );
-                                if let Some(mut played) = played {
-                                    *played.get_mut("game_id").unwrap() =
-                                        serde_json::json!(m.game_id);
-                                    let status = &played["status"].as_i64().unwrap();
-
-                                    self.send_message_to_spectators(&m.game_id, &played);
-                                    self.send_message_to_tv(&played);
-
-                                    if status > &0 {
-                                        let game = self.games.get_game(&m.game_id).unwrap().1;
-                                        let b = update_entire_game(&self, &m.game_id, &game, true);
-                                        let actor_future = b.into_actor(self);
-                                        ctx.spawn(actor_future);
-                                        self.games.remove_game(&m.game_id);
-                                        res = serde_json::json!({"t": "active_games_count", "cnt": self.games.shuuro_games.len()});
-                                        let tv_res = serde_json::json!({"t": "live_game_end", "game_id": &m.game_id});
-                                        self.send_message_to_tv(&tv_res);
-                                        return self.send_message_to_all(res);
-                                    }
-                                    return ();
-                                }
-                            }
-                        } else if t == "live_game_hand" {
-                            let m = serde_json::from_str::<GameGetHand>(&msg.text);
-                            if let Ok(m) = m {
-                                let hand = self.games.get_hand(m.game_id, &msg.player.username());
-                                res = serde_json::json!({"t": t, "hand": &hand});
-                            }
-                        } else if t == "live_game_confirmed" {
-                            let m = serde_json::from_str::<GameGetConfirmed>(&msg.text);
-                            if let Ok(m) = m {
-                                let confirmed = self.games.confirmed_players(&m.game_id);
-                                res = serde_json::json!({"t": t, "confirmed": &confirmed});
-                            }
-                        } else if t == "live_game_draw" {
-                            let m = serde_json::from_str::<GameGetConfirmed>(&msg.text);
-                            if let Ok(m) = m {
-                                let draw = self.games.draw_req(&m.game_id, &msg.player.username());
-                                if draw == 5 {
-                                    res = serde_json::json!({"t": t, "draw": true});
-                                    self.send_message_to_spectators(&m.game_id, &res);
+                                self.send_message_to_spectators(&m.game_id, &placed);
+                                self.send_message_to_tv(&placed);
+                                //tv
+                                if placed.get("first_move_error").unwrap()
+                                    == &serde_json::json!(true)
+                                {
                                     let game = self.games.get_game(&m.game_id).unwrap().1;
                                     let b = update_entire_game(&self, &m.game_id, &game, true);
                                     let actor_future = b.into_actor(self);
                                     ctx.spawn(actor_future);
                                     self.games.remove_game(&m.game_id);
-                                    res = serde_json::json!({"t": "active_games_count", "cnt": self.games.shuuro_games.len()});
-                                    return self.send_message_to_all(res);
-                                } else if draw == -2 {
-                                    res = serde_json::json!({"t": t, "draw": false, "player": &msg.player.username()});
-                                } else if draw == -3 {
-                                    return ();
-                                }
-                                return self.send_message_to_spectators(&m.game_id, &res);
-                            }
-                        } else if t == "live_game_resign" {
-                            let m = serde_json::from_str::<GameGetConfirmed>(&msg.text);
-                            if let Ok(m) = m {
-                                let resign = self.games.resign(&m.game_id, &msg.player.username());
-                                if resign {
-                                    res = serde_json::json!({"t": t, "resign": true, "player": &msg.player.username()});
-                                    self.send_message_to_spectators(&m.game_id, &res);
-                                    let game = self.games.get_game(&m.game_id).unwrap().1;
-                                    let b = update_entire_game(&self, &m.game_id, &game, true);
-                                    let actor_future = b.into_actor(self);
-                                    ctx.spawn(actor_future);
-                                    self.games.remove_game(&m.game_id);
-                                    res = serde_json::json!({"t": "active_games_count", "cnt": self.games.shuuro_games.len()});
+                                    res = cnt!("active_games_count", self.games.shuuro_games);
+                                    let tv_res = serde_json::json!({"t": "live_game_end", "game_id": &m.game_id});
+                                    self.send_message_to_tv(&tv_res);
                                     return self.send_message_to_all(res);
                                 }
                                 return ();
                             }
-                        } else if t == "live_chat_message" {
-                            let m = serde_json::from_str::<ChatItem>(&msg.text);
-                            if let Ok(mut m) = m {
-                                if let Some(res) =
-                                    self.chat2.add_msg(&m.id.clone(), &mut m, &msg.player)
-                                {
-                                    if &m.id == "home" {
-                                        return self.send_message_to_all(res);
-                                    } else {
-                                        return self.send_message_to_spectators(&m.id, &res);
-                                    }
+                        }
+                    } else if t == "live_game_play" {
+                        let m = serde_json::from_str::<GameMove>(&msg.text);
+                        if let Ok(m) = m {
+                            let played =
+                                self.games
+                                    .play(&m.game_id, m.game_move, &msg.player.username());
+                            if let Some(mut played) = played {
+                                *played.get_mut("game_id").unwrap() = serde_json::json!(m.game_id);
+                                let status = &played["status"].as_i64().unwrap();
+
+                                self.send_message_to_spectators(&m.game_id, &played);
+                                self.send_message_to_tv(&played);
+
+                                if status > &0 {
+                                    let game = self.games.get_game(&m.game_id).unwrap().1;
+                                    let b = update_entire_game(&self, &m.game_id, &game, true);
+                                    let actor_future = b.into_actor(self);
+                                    ctx.spawn(actor_future);
+                                    self.games.remove_game(&m.game_id);
+                                    res = cnt!("active_games_count", self.games.shuuro_games);
+                                    let tv_res = serde_json::json!({"t": "live_game_end", "game_id": &m.game_id});
+                                    self.send_message_to_tv(&tv_res);
+                                    return self.send_message_to_all(res);
                                 }
+                                return ();
                             }
-                            return ();
-                        } else if t == "home_lobby_full" {
-                            res = self.lobby.response()
-                        } else if t == "just_stop" {
-                            let data_type = &i["game_id"];
-                            match data_type {
-                                serde_json::Value::String(t) => {
-                                    self.games.stop(t);
-                                }
-                                _ => (),
-                            }
-                        } else if t == "home_lobby_add" {
-                            let m = serde_json::from_str::<LobbyGame>(&msg.text);
-                            if let Ok(mut game) = m {
-                                if game.is_valid() {
-                                    if self.lobby.can_add(&game) {
-                                        self.games.can_add(&game.username());
-                                        if self.games.can_add(&game.username()) {
-                                            res = game.response(&t);
-                                            self.lobby.add(game);
-                                            return self.send_message_to_all(res);
-                                        }
-                                    }
-                                }
-                            }
-                        } else if t == "home_lobby_accept" {
-                            let m = serde_json::from_str::<LobbyGame>(&msg.text);
-                            if let Ok(mut game) = m {
-                                if game.is_valid() {
-                                    if &game.username() == &msg.player.username() {
-                                        res = game.response(&String::from("home_lobby_remove"));
-                                        let deleted = self.lobby.delete(game);
-                                        if deleted >= 0 {
-                                            return self.send_message_to_all(res);
-                                        }
-                                        res = serde_json::json!({"t": "error"});
-                                        return self.send_message_to_all(res);
-                                    } else {
-                                        let users = game.colors(&msg.player.username());
-                                        let mut shuuro_game = ShuuroGame::from(&game);
-                                        shuuro_game.white = users[0].clone();
-                                        shuuro_game.black = users[1].clone();
-                                        let res = game.response(&String::from("home_lobby_remove"));
-                                        let deleted = self.lobby.delete(game);
-                                        if deleted >= 0 {
-                                            self.send_message_to_all(res);
-                                        }
-                                        let deleted = self.lobby.delete_by_user(&msg.player);
-                                        if deleted {
-                                            let temp_res = serde_json::json!({"t": "home_lobby_remove_user",
-                                                "username": &msg.player.username()});
-                                            self.send_message_to_all(temp_res);
-                                        }
-                                        let db_shuuro_games = self.db_shuuro_games.clone();
-                                        let db_users = self.db_users.clone();
-                                        let b = new_game(
-                                            &ctx,
-                                            db_shuuro_games,
-                                            users,
-                                            shuuro_game,
-                                            db_users,
-                                        );
-                                        let actor_future = b.into_actor(self);
-                                        ctx.spawn(actor_future);
-                                        return;
-                                    }
-                                }
-                            }
-                        } else if t == "save_to_db" {
-                            /*
-                            if &msg.player.username() == "ADMIN" {
-                                res = serde_json::json!({"t": "live_restart"});
-                                let all = self.games.get_all();
-                                let b = update_all(&self, all);
+                        }
+                    } else if t == "live_game_hand" {
+                        let m = serde_json::from_str::<GameGetHand>(&msg.text);
+                        if let Ok(m) = m {
+                            let hand = self.games.get_hand(m.game_id, &msg.player.username());
+                            res = serde_json::json!({"t": t, "hand": &hand});
+                        }
+                    } else if t == "live_game_confirmed" {
+                        let m = serde_json::from_str::<GameGet>(&msg.text);
+                        if let Ok(m) = m {
+                            let confirmed = self.games.confirmed_players(&m.game_id);
+                            res = serde_json::json!({"t": t, "confirmed": &confirmed});
+                        }
+                    } else if t == "live_game_draw" {
+                        let m = serde_json::from_str::<GameGet>(&msg.text);
+                        if let Ok(m) = m {
+                            let draw = self.games.draw_req(&m.game_id, &msg.player.username());
+                            if draw == 5 {
+                                res = serde_json::json!({"t": t, "draw": true});
+                                self.send_message_to_spectators(&m.game_id, &res);
+                                let game = self.games.get_game(&m.game_id).unwrap().1;
+                                let b = update_entire_game(&self, &m.game_id, &game, true);
                                 let actor_future = b.into_actor(self);
                                 ctx.spawn(actor_future);
+                                self.games.remove_game(&m.game_id);
+                                res = cnt!("active_games_count", self.games.shuuro_games);
+                                return self.send_message_to_all(res);
+                            } else if draw == -2 {
+                                res = serde_json::json!({"t": t, "draw": false, "player": &msg.player.username()});
+                            } else if draw == -3 {
+                                return ();
+                            }
+                            return self.send_message_to_spectators(&m.game_id, &res);
+                        }
+                    } else if t == "live_game_resign" {
+                        let m = serde_json::from_str::<GameGet>(&msg.text);
+                        if let Ok(m) = m {
+                            let resign = self.games.resign(&m.game_id, &msg.player.username());
+                            if resign {
+                                res = serde_json::json!({"t": t, "resign": true, "player": &msg.player.username()});
+                                self.send_message_to_spectators(&m.game_id, &res);
+                                let game = self.games.get_game(&m.game_id).unwrap().1;
+                                let b = update_entire_game(&self, &m.game_id, &game, true);
+                                let actor_future = b.into_actor(self);
+                                ctx.spawn(actor_future);
+                                self.games.remove_game(&m.game_id);
+                                res = cnt!("active_games_count", self.games.shuuro_games);
                                 return self.send_message_to_all(res);
                             }
-                            */
-                        } else {
-                            () //res = serde_json::json!({"t": "error"});
+                            return ();
                         }
-                    }
-                    _ => {
-                        () //res = serde_json::json!({"t": "error"});
+                    } else if t == "live_chat_message" {
+                        let m = serde_json::from_str::<ChatItem>(&msg.text);
+                        if let Ok(mut m) = m {
+                            if let Some(res) = self.chat.add_msg(&m.id.clone(), &mut m, &msg.player)
+                            {
+                                if &m.id == "home" {
+                                    return self.send_message_to_all(res);
+                                } else {
+                                    return self.send_message_to_spectators(&m.id, &res);
+                                }
+                            }
+                        }
+                        return ();
+                    } else if t == "home_lobby_full" {
+                        res = self.lobby.response()
+                    } else if t == "just_stop" {
+                        let data_type = &i["game_id"];
+                        match data_type {
+                            serde_json::Value::String(t) => {
+                                self.games.stop(t);
+                            }
+                            _ => (),
+                        }
+                    } else if t == "home_lobby_add" {
+                        let m = serde_json::from_str::<LobbyGame>(&msg.text);
+                        if let Ok(mut game) = m {
+                            if game.is_valid() {
+                                if self.lobby.can_add(&game) {
+                                    self.games.can_add(&game.username());
+                                    if self.games.can_add(&game.username()) {
+                                        res = game.response(&t);
+                                        self.lobby.add(game);
+                                        return self.send_message_to_all(res);
+                                    }
+                                }
+                            }
+                        }
+                    } else if t == "home_lobby_accept" {
+                        let m = serde_json::from_str::<LobbyGame>(&msg.text);
+                        if let Ok(mut game) = m {
+                            if game.is_valid() {
+                                if &game.username() == &msg.player.username() {
+                                    res = game.response(&String::from("home_lobby_remove"));
+                                    let deleted = self.lobby.delete(game);
+                                    if deleted >= 0 {
+                                        return self.send_message_to_all(res);
+                                    }
+                                    res = serde_json::json!({"t": "error"});
+                                    return self.send_message_to_all(res);
+                                } else {
+                                    let users = game.colors(&msg.player.username());
+                                    let mut shuuro_game = ShuuroGame::from(&game);
+                                    shuuro_game.white = users[0].clone();
+                                    shuuro_game.black = users[1].clone();
+                                    let res = game.response(&String::from("home_lobby_remove"));
+                                    let deleted = self.lobby.delete(game);
+                                    if deleted >= 0 {
+                                        self.send_message_to_all(res);
+                                    }
+                                    let deleted = self.lobby.delete_by_user(&msg.player);
+                                    if deleted {
+                                        let temp_res = serde_json::json!({"t": "home_lobby_remove_user",
+                                                "username": &msg.player.username()});
+                                        self.send_message_to_all(temp_res);
+                                    }
+                                    let db_shuuro_games = self.db_shuuro_games.clone();
+                                    let db_users = self.db_users.clone();
+                                    let b = new_game(
+                                        &ctx,
+                                        db_shuuro_games,
+                                        users,
+                                        shuuro_game,
+                                        db_users,
+                                    );
+                                    let actor_future = b.into_actor(self);
+                                    ctx.spawn(actor_future);
+                                    return;
+                                }
+                            }
+                        }
+                    } else if t == "save_to_db" {
+                        /*
+                        if &msg.player.username() == "ADMIN" {
+                            res = serde_json::json!({"t": "live_restart"});
+                            let all = self.games.get_all();
+                            let b = update_all(&self, all);
+                            let actor_future = b.into_actor(self);
+                            ctx.spawn(actor_future);
+                            return self.send_message_to_all(res);
+                        }
+                        */
+                    } else {
+                        return (); //res = serde_json::json!({"t": "error"});
                     }
                 }
-            }
-            Err(_err) => {
-                () //res = serde_json::json!({"t": "error"});
+                _ => {
+                    return (); //res = serde_json::json!({"t": "error"});
+                }
             }
         }
 
@@ -476,15 +462,15 @@ impl Handler<Connect> for Lobby {
         for player in self.active_players.iter() {
             self.send_message(
                 &player.0.clone(),
-                serde_json::json!({"t": "live_chat_full", "id": "home", "lines": self.chat2.chat(&String::from("home")).unwrap()}),
+                serde_json::json!({"t": "live_chat_full", "id": "home", "lines": self.chat.chat(&String::from("home")).unwrap()}),
             );
             self.send_message(
                 &player.0.clone(),
-                serde_json::json!({"t": "active_players_count", "cnt": self.active_players.len()}),
+                cnt!("active_players_count", self.active_players),
             );
             self.send_message(
                 &player.0.clone(),
-                serde_json::json!({"t": "active_games_count", "cnt": self.games.shuuro_games.len()}),
+                cnt!("active_game_count", self.games.shuuro_games),
             );
         }
     }
@@ -496,10 +482,8 @@ impl Handler<Disconnect> for Lobby {
     fn handle(&mut self, msg: Disconnect, _ctx: &mut Context<Self>) {
         self.active_players.remove(&msg.player);
         self.lobby.delete_by_user(&msg.player);
-        let player_count =
-            serde_json::json!({"t": "active_players_count", "cnt": self.active_players.len()});
-        let matches_count =
-            serde_json::json!({"t": "active_games_count", "cnt": self.games.shuuro_games.len()});
+        let player_count = cnt!("active_players_count", self.active_players);
+        let matches_count = cnt!("active_games_count", self.games.shuuro_games);
         let temp_res = serde_json::json!({"t": "home_lobby_remove_user",
                                                 "username": &msg.player.username()});
         self.remove_spectator(&msg.player.username().as_str());
@@ -519,16 +503,15 @@ impl Handler<GameMessage> for Lobby {
                 users,
                 mut shuuro_game,
             } => {
-                println!("{}", &shuuro_game.ratings.len());
                 shuuro_game.game_id = game_id.clone();
                 self.add_spectator(users[0].as_str(), game_id.as_str());
                 self.add_spectator(users[1].as_str(), game_id.as_str());
                 let res = serde_json::json!({"t": "live_game_start", "game_id": game_id, "game_info": &shuuro_game });
                 self.games.add_game(&game_id, &shuuro_game, &ctx);
                 self.send_message_to_selected(res, users);
-                let res = serde_json::json!({"t": "active_games_count", "cnt": self.games.shuuro_games.len()});
+                let res = cnt!("active_games_count", self.games.shuuro_games);
                 self.send_message_to_all(res);
-                self.chat2.add_room(game_id);
+                self.chat.add_room(game_id);
                 return true;
             }
             GameMessageType::TimeCheck { game_id } => {
@@ -554,16 +537,12 @@ impl Handler<GameMessage> for Lobby {
             }
             GameMessageType::RemoveGame { game_id } => {
                 self.games.remove_game(&game_id);
-                let res = serde_json::json!({"t": "active_games_count", "cnt": self.games.shuuro_games.len()});
+                let res = cnt!("active_games_count", self.games.shuuro_games);
                 self.send_message_to_all(res);
                 return true;
             }
             GameMessageType::StartAll { games } => {
                 self.games.set_all(games, &ctx);
-                return true;
-            }
-            GameMessageType::SaveAll => {
-                println!("{}", self.games.len());
                 return true;
             }
         }

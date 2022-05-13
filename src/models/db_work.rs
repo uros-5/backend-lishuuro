@@ -169,8 +169,8 @@ pub fn new_game<'a>(
                 }
                 let id = g.ok().unwrap().inserted_id.to_string();
                 let game_id = oid(id);
-                let filter = doc!{"_id": ObjectId::from_str(&game_id).unwrap()};
-                let update = doc!{"$set": bson::to_bson(&shuuro_game).unwrap()};
+                let filter = doc! {"_id": ObjectId::from_str(&game_id).unwrap()};
+                let update = doc! {"$set": bson::to_bson(&shuuro_game).unwrap()};
                 shuuro_games.update_one(filter, update, None).await;
                 ctx.do_send(GameMessage::new_adding_game(
                     game_id.clone(),
@@ -229,7 +229,6 @@ pub fn start_clock(ctx: Addr<Lobby>, game_id: &String) {
                     break;
                 }
             } else {
-                println!("game does not exist");
                 break;
             }
         }
