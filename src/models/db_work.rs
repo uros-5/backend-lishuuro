@@ -126,21 +126,18 @@ pub fn get_home_news(
 }
 
 pub fn get_game<'a>(
-    self1: &Lobby,
+    self1: Lobby,
     game_id: String,
     player: ActivePlayer,
 ) -> impl Future<Output = ()> + 'a {
     let filter = doc! {"_id": ObjectId::from_str(game_id.as_str()).unwrap()};
     let db = self1.db_shuuro_games.clone();
-    let self2 = self1.clone();
-    let game_id = game_id.clone();
-
     let b = Box::pin(async move {
         let game = db.find_one(filter, None);
         if let Ok(g) = game.await {
             if let Some(g) = g {
                 let res = serde_json::json!({"t": "live_game_start", "game_id": game_id, "game_info": &g.clone()});
-                self2.send_message(&player, res);
+                self1.send_message(&player, res);
             }
         }
     });
@@ -240,6 +237,7 @@ pub async fn save_state(address: Addr<Lobby>) {
     if let Ok(res) = games {
         update_all(res.0, res.1).await;
     }
+    
 }
 
 pub async fn update_all(all: Vec<(String, ShuuroGame)>, db: Collection<ShuuroGame>) {
