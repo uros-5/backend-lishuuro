@@ -228,13 +228,15 @@ impl Handler<RegularMessage> for Lobby {
                             self.games
                                 .buy(&m.game_id, m.game_move, &msg.player.username());
                             // if both sides are confirmed then notify them and redirect players.
-                            if !self.games.confirmed_players(&m.game_id).contains(&false) {
+                            let confirmed = self.games.confirmed_players(&m.game_id);
+                            if !confirmed.contains(&false) {
                                 res = self.games.set_deploy(&m.game_id);
-                                let res2 = serde_json::json!({"t": "pause_confirmed", "confirmed": &self.games.confirmed_players(&m.game_id)});
+                                let res2 = serde_json::json!({"t": "pause_confirmed", "confirmed": confirmed});
                                 self.send_message_to_spectators(&m.game_id, &res2);
                                 self.send_message_to_spectators(&m.game_id, &res);
+                                self.send_message_to_tv(&res);
                             } else if t == "live_game_confirm" {
-                                res = serde_json::json!({"t": "pause_confirmed", "confirmed": &self.games.confirmed_players(&m.game_id)});
+                                res = serde_json::json!({"t": "pause_confirmed", "confirmed": confirmed});
                                 self.send_message_to_spectators(&m.game_id, &res.clone());
                             }
                             return ();

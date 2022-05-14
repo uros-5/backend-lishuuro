@@ -14,6 +14,7 @@ use super::{
 #[derive(Clone)]
 pub struct LiveGames {
     pub shuuro_games: HashMap<String, ShuuroLive>,
+    pub tv: HashSet<String>
 }
 
 impl LiveGames {
@@ -98,6 +99,9 @@ impl LiveGames {
         if let Some(g) = self.shuuro_games.get(id) {
             return Some(g.spectators());
         }
+        else if id == "tv" {
+            return Some(&self.tv);
+        }
         None
     }
 
@@ -149,6 +153,9 @@ impl LiveGames {
         if let Some(game) = game {
             return game.add_spectator(username);
         }
+        else if id == "tv" {
+            self.tv.insert(username.to_string());
+        }
         0
     }
 
@@ -156,6 +163,10 @@ impl LiveGames {
         let game = self.shuuro_games.get_mut(id);
         if let Some(game) = game {
             return game.remove_spectator(username);
+        }
+        else if id == "tv" {
+            println!("removed from tv");
+            self.tv.remove(&username.to_string());
         }
         0
     }
@@ -192,6 +203,8 @@ impl LiveGames {
                     "hand":g.get_hand(&String::from("")),
                     "last_clock": g.time_control.get_last_click().to_string(),
                     "side_to_move": "w",
+                    "w": String::from(&g.game.white),
+                    "b": String::from(&g.game.black),
                     "sfen": g.game.sfen});
             }
             None => {
@@ -256,6 +269,7 @@ impl Default for LiveGames {
         init();
         LiveGames {
             shuuro_games: HashMap::new(),
+            tv: HashSet::new()
         }
     }
 }

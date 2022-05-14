@@ -450,7 +450,7 @@ pub struct TvGame {
     pub game_id: String,
     pub w: String,
     pub b: String,
-    pub fen: String,
+    pub sfen: String,
 }
 
 impl TvGame {
@@ -460,7 +460,7 @@ impl TvGame {
             game_id: String::from(game_id),
             w: String::from(w),
             b: String::from(b),
-            fen: String::from(fen),
+            sfen: String::from(fen),
         }
     }
 }
