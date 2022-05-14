@@ -304,8 +304,9 @@ impl Handler<RegularMessage> for Lobby {
                         if let Ok(m) = m {
                             let draw = self.games.draw_req(&m.game_id, &msg.player.username());
                             if draw == 5 {
-                                res = serde_json::json!({"t": t, "draw": true});
+                                res = serde_json::json!({"t": t, "draw": true, "game_id": &m.game_id});
                                 self.send_message_to_spectators(&m.game_id, &res);
+                                self.send_message_to_tv(&res);
                                 self.remove_game(&m.game_id, ctx);
                                 res = cnt!("active_games_count", self.games.shuuro_games);
                                 return self.send_message_to_all(res);
@@ -321,9 +322,12 @@ impl Handler<RegularMessage> for Lobby {
                         if let Ok(m) = m {
                             let resign = self.games.resign(&m.game_id, &msg.player.username());
                             if resign {
-                                res = serde_json::json!({"t": t, "resign": true, "player": &msg.player.username()});
+                                res = serde_json::json!({"t": t, "resign": true,
+                                 "player": &msg.player.username(),
+                                 "game_id": &m.game_id});
                                 self.send_message_to_spectators(&m.game_id, &res);
                                 self.remove_game(&m.game_id, ctx);
+                                self.send_message_to_tv(&res);
                                 res = cnt!("active_games_count", self.games.shuuro_games);
                                 return self.send_message_to_all(res);
                             }
@@ -518,7 +522,8 @@ impl Handler<GameMessage> for Lobby {
                     let b = update_entire_game(&self2, &game_id, &game, true);
                     let actor_future = b.into_actor(&self2);
                     ctx.spawn(actor_future);
-                    let res_specs = serde_json::json!({"t": "live_game_lot",
+                    let res_specs = serde_json::json!({
+                        "t": "live_game_lot",
                      "game_id": &game_id, "status": 8 as u8,
                       "result": &game.side_to_move});
                     let tv_res = serde_json::json!({"t": "live_game_end", "game_id": &game_id});

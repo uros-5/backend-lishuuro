@@ -504,6 +504,7 @@ impl ShuuroLive {
                                             "game_id": "",
                                             "to_fight": self.is_deployment_over(),
                                             "first_move_error": first_move_error }));
+                                            // abc 
                                 }
                             }
                         }
@@ -540,6 +541,7 @@ impl ShuuroLive {
                                         "game_move": game_move,
                                         "status": 0 as i64,
                                         "game_id": "", "outcome": m.to_string()});
+                                        // abc 
                                         self.game.side_to_move =
                                             self.fight.side_to_move().to_string();
                                         self.game.sfen = self.fight.generate_sfen();
