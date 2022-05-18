@@ -14,7 +14,7 @@ use super::{
 #[derive(Clone)]
 pub struct LiveGames {
     pub shuuro_games: HashMap<String, ShuuroLive>,
-    pub tv: HashSet<String>
+    pub tv: HashSet<String>,
 }
 
 impl LiveGames {
@@ -24,7 +24,7 @@ impl LiveGames {
 
     pub fn can_add(&self, username: &String) -> bool {
         for i in &self.shuuro_games {
-            if i.1.can_add(&username) {
+            if !i.1.can_add(&username) {
                 return false;
             }
         }
@@ -98,8 +98,7 @@ impl LiveGames {
     pub fn spectators(&self, id: &String) -> Option<&HashSet<String>> {
         if let Some(g) = self.shuuro_games.get(id) {
             return Some(g.spectators());
-        }
-        else if id == "tv" {
+        } else if id == "tv" {
             return Some(&self.tv);
         }
         None
@@ -111,8 +110,7 @@ impl LiveGames {
             Some(g) => {
                 g.running = false;
             }
-            None => {
-            }
+            None => {}
         }
     }
 
@@ -123,8 +121,7 @@ impl LiveGames {
             Some(g) => {
                 g.buy(game_move, username);
             }
-            None => {
-            }
+            None => {}
         }
     }
 
@@ -132,8 +129,7 @@ impl LiveGames {
         let game = self.shuuro_games.get_mut(id);
         match game {
             Some(g) => return g.place(game_move, username),
-            None => {
-            }
+            None => {}
         }
         None
     }
@@ -142,8 +138,7 @@ impl LiveGames {
         let game = self.shuuro_games.get_mut(id);
         match game {
             Some(g) => return g.play(game_move, username),
-            None => {
-            }
+            None => {}
         }
         None
     }
@@ -152,8 +147,7 @@ impl LiveGames {
         let game = self.shuuro_games.get_mut(id);
         if let Some(game) = game {
             return game.add_spectator(username);
-        }
-        else if id == "tv" {
+        } else if id == "tv" {
             self.tv.insert(username.to_string());
         }
         0
@@ -163,9 +157,7 @@ impl LiveGames {
         let game = self.shuuro_games.get_mut(id);
         if let Some(game) = game {
             return game.remove_spectator(username);
-        }
-        else if id == "tv" {
-            println!("removed from tv");
+        } else if id == "tv" {
             self.tv.remove(&username.to_string());
         }
         0
@@ -252,7 +244,7 @@ impl LiveGames {
         if let Some(g) = self.shuuro_games.get(game_id) {
             return Some(g.time_ok());
         }
-        None 
+        None
     }
     pub fn lost_on_time(&mut self, game_id: &String) -> Option<&ShuuroGame> {
         let game = self.shuuro_games.get_mut(game_id);
@@ -269,7 +261,7 @@ impl Default for LiveGames {
         init();
         LiveGames {
             shuuro_games: HashMap::new(),
-            tv: HashSet::new()
+            tv: HashSet::new(),
         }
     }
 }
@@ -295,7 +287,7 @@ impl From<&ShuuroGame> for ShuuroLive {
             deploy: Position::default(),
             fight: Position::default(),
             running: true,
-            time_control, 
+            time_control,
             draws: [false, false],
             spectators: HashSet::new(),
         }
@@ -499,12 +491,15 @@ impl ShuuroLive {
                                             self.game.status = 7;
                                         }
                                     }
-                                    return Some(serde_json::json!({"t": "live_game_place",
+                                    let mut res = serde_json::json!({"t": "live_game_place",
                                             "move": game_move, 
                                             "game_id": "",
                                             "to_fight": self.is_deployment_over(),
-                                            "first_move_error": first_move_error }));
-                                            // abc 
+                                            "first_move_error": first_move_error,
+                                            "clocks": [] });
+                                    let res = self.update_res(&mut res);
+                                    return Some(res);
+                                    // abc
                                 }
                             }
                         }
@@ -540,8 +535,9 @@ impl ShuuroLive {
                                         let mut res = serde_json::json!({"t": "live_game_play",
                                         "game_move": game_move,
                                         "status": 0 as i64,
-                                        "game_id": "", "outcome": m.to_string()});
-                                        // abc 
+                                        "game_id": "", "outcome": m.to_string(),
+                                        "clocks": []});
+                                        // abc
                                         self.game.side_to_move =
                                             self.fight.side_to_move().to_string();
                                         self.game.sfen = self.fight.generate_sfen();
@@ -555,6 +551,7 @@ impl ShuuroLive {
                                         self.game.last_clock = self.time_control.get_last_click();
                                         self.game.black_clock = self.time_control.get_clock('b');
                                         self.game.white_clock = self.time_control.get_clock('w');
+                                        let res = self.update_res(&mut res);
                                         return Some(res);
                                     } else {
                                         return None;
@@ -568,6 +565,14 @@ impl ShuuroLive {
             }
         }
         None
+    }
+
+    pub fn update_res(&self, res: &mut Value) -> Value {
+        let w = self.game.white_clock.whole_milliseconds() as u64;
+        let b = self.game.black_clock.whole_milliseconds() as u64;
+        let clocks = [w, b];
+        *res.get_mut("clocks").unwrap() = serde_json::json!(clocks);
+        res.clone()
     }
 
     pub fn is_deployment_over(&self) -> bool {

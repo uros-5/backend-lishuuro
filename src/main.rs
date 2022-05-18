@@ -11,7 +11,7 @@ use time::Duration;
 use actix_cors::Cors;
 use actix_redis::RedisSession;
 use actix_web::{web, App, HttpServer};
-use controller::{callback, login, news, test, user_games, vue_user};
+use controller::{callback, login, news, user_games, vue_user};
 
 use models::model::{AppState, NewsItem};
 use mongodb::{options::ClientOptions, Client};
@@ -27,7 +27,6 @@ use crate::models::db_work::save_state;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    println!("http://localhost:8080/test");
     let mut client_options = ClientOptions::parse("mongodb://127.0.0.1:27017")
         .await
         .expect("No client available");
@@ -52,7 +51,6 @@ async fn main() -> std::io::Result<()> {
             .route("/login", web::get().to(login))
             .route("/callback", web::get().to(callback))
             .route("/vue_user", web::get().to(vue_user))
-            .route("/test", web::get().to(test))
             .route("/news/{id}", web::get().to(news))
             .route("/games/{username}", web::get().to(user_games))
             .service(start_connection)
@@ -67,7 +65,7 @@ async fn main() -> std::io::Result<()> {
 pub fn get_cors() -> Cors {
     let cors = Cors::default()
         .allow_any_header()
-        .allow_any_origin()
+        .allowed_origin("http://localhost:3000")
         .allow_any_method()
         .supports_credentials();
     cors

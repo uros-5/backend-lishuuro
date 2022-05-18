@@ -1,6 +1,6 @@
 use actix::prelude::{Message, Recipient};
 use mongodb::Collection;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use crate::models::model::{ActivePlayer, NewsItem, ShuuroGame};
 
@@ -68,7 +68,6 @@ impl GameMessage {
         let message_type = GameMessageType::start_all(games);
         Self { message_type }
     }
-
 }
 
 pub enum GameMessageType {
@@ -144,6 +143,8 @@ impl News {
 
 #[derive(Message)]
 #[rtype(result = "(Vec<(String, ShuuroGame)>, Collection<ShuuroGame>)")]
-pub struct Games {}
+pub struct Games; 
 
-
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct Restart;

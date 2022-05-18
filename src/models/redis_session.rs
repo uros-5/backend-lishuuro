@@ -8,8 +8,7 @@ use serde::Serialize;
 use std::sync::Mutex;
 
 pub async fn set_value<T: Serialize>(session: &Session, key: &str, value: &T) {
-    if let Err(_e) = session.set(key, value) {
-    }
+    if let Err(_e) = session.set(key, value) {}
 }
 
 pub async fn is_logged(session: &Session) -> (bool, String) {

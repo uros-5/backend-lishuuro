@@ -9,6 +9,8 @@ use std::hash::{Hash, Hasher};
 use std::{collections::HashMap, time::Duration as StdD};
 use time::{Duration, OffsetDateTime, PrimitiveDateTime};
 
+use crate::lichess::login::random_username;
+
 pub const VARIANTS: [&str; 1] = ["shuuro12"];
 pub const DURATION_RANGE: [i64; 28] = [
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 25, 30, 35, 40, 45, 60,
@@ -64,9 +66,9 @@ impl User {
             active: true,
             currently_playing: false,
             created_at: String::from(""),
-            last_games: vec![PlayerMatch::new(&[1500.00, 300.00], "d")],
+            last_games: vec![],
             rating: 1500.00,
-            deviation: 300 as f64,
+            deviation: 300.00,
         }
     }
 
@@ -75,6 +77,19 @@ impl User {
         let second = json!({ "reg": reg });
         first.merge(second);
         first
+    }
+
+    pub async fn db_username(db: &Collection<User>) -> String {
+        let mut _duplicate = true;
+        while _duplicate {
+            let username = random_username();
+            let anon = User::new(&username);
+            let res = db.insert_one(&anon, None).await;
+            if let Ok(_) = res {
+                return String::from(&username);
+            }
+        }
+        String::from("")
     }
 }
 
@@ -424,12 +439,12 @@ impl LobbyGame {
         c_s
     }
 
-    /// 
+    ///
     pub fn color(&self) -> &String {
         &self.color
     }
 
-    fn random_color(&self)-> String {
+    fn random_color(&self) -> String {
         if rand::random() {
             String::from("white")
         } else {
@@ -491,7 +506,7 @@ impl Default for LobbyGames {
 impl LobbyGames {
     pub fn can_add(&self, game: &LobbyGame) -> bool {
         for i in &self.all {
-            if *i == *game {
+            if i == game {
                 return false;
             }
         }
@@ -607,8 +622,6 @@ impl TimeControl {
     fn elapsed(&self) -> Duration {
         OffsetDateTime::now_utc() - self.last_click
     }
-
-    
 }
 
 impl From<&ShuuroGame> for TimeControl {

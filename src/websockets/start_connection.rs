@@ -23,17 +23,12 @@ pub async fn start_connection(
     let app_data = app_data.lock().unwrap();
     // username == '' create add to session add to mongo
     if username == "" {
-        username = random_username();
-        let anon = User::new(&username);
+        // find username
+        username = User::db_username(&app_data.users).await;
         let verifier = create_verifier();
         set_value(&session, "codeVerifier", &verifier).await;
-        set_value(&session, "username", &anon.username).await;
+        set_value(&session, "username", &username).await;
         set_value(&session, "reg", &false).await;
-        let mongo_result = app_data.users.insert_one(&anon, None).await;
-        match mongo_result {
-            Ok(_) => (),
-            Err(_e) => {}
-        }
     } else {
         set_value(&session, "username", &username).await;
         set_value(&session, "reg", &logged).await;

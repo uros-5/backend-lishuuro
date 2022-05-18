@@ -1,5 +1,6 @@
 use super::messages::{
-    Connect, Disconnect, GameMessage, GameMessageType, Games, News, RegularMessage, WsMessage,
+    Connect, Disconnect, GameMessage, GameMessageType, Games, News, RegularMessage, Restart,
+    WsMessage,
 };
 use crate::models::db_work::*;
 use crate::models::live_games::LiveGames;
@@ -102,8 +103,7 @@ impl Lobby {
     }
 
     pub fn add_spectator(&mut self, username: &str, game_id: &str) -> (bool, usize) {
-        self
-            .spectators
+        self.spectators
             .insert(String::from(username), String::from(game_id));
         {
             if game_id != String::from("") {
@@ -131,7 +131,7 @@ impl Lobby {
 
     pub fn remove_game(&mut self, game_id: &String, ctx: &mut Context<Lobby>) {
         let game = self.games.get_game(game_id).unwrap().1;
-        let b = update_entire_game(&self, game_id, &game, true);
+        let b = update_entire_game(self.db_shuuro_games.clone(), game_id, &game);
         let actor_future = b.into_actor(self);
         ctx.spawn(actor_future);
         self.games.remove_game(game_id);
@@ -146,7 +146,7 @@ impl Actor for Lobby {
         let db = self.db_shuuro_games.clone();
 
         tokio::spawn(async move {
-            let past_games = get_all(&db).await;
+            let past_games = unfinished(&db).await;
             address.do_send(GameMessage::start_all(past_games));
         });
     }
@@ -361,7 +361,6 @@ impl Handler<RegularMessage> for Lobby {
                         if let Ok(mut game) = m {
                             if game.is_valid() {
                                 if self.lobby.can_add(&game) {
-                                    self.games.can_add(&game.username());
                                     if self.games.can_add(&game.username()) {
                                         res = game.response(&t);
                                         self.lobby.add(game);
@@ -413,18 +412,7 @@ impl Handler<RegularMessage> for Lobby {
                                 }
                             }
                         }
-                    } else if t == "save_to_db" {
-                        /*
-                        if &msg.player.username() == "ADMIN" {
-                            res = serde_json::json!({"t": "live_restart"});
-                            let all = self.games.get_all();
-                            let b = update_all(&self, all);
-                            let actor_future = b.into_actor(self);
-                            ctx.spawn(actor_future);
-                            return self.send_message_to_all(res);
-                        }
-                        */
-                    } else {
+                    }  else {
                         return (); //res = serde_json::json!({"t": "error"});
                     }
                 }
@@ -513,13 +501,14 @@ impl Handler<GameMessage> for Lobby {
             }
             GameMessageType::TimeCheck { game_id } => {
                 let time = self.games.time_ok(&game_id);
-                return time; 
+                return time;
             }
             GameMessageType::LostOnTime { game_id } => {
                 let self2 = self.clone();
+                let db = self.db_shuuro_games.clone();
                 let game = self.games.lost_on_time(&game_id);
                 if let Some(game) = game {
-                    let b = update_entire_game(&self2, &game_id, &game, true);
+                    let b = update_entire_game(db, &game_id, &game);
                     let actor_future = b.into_actor(&self2);
                     ctx.spawn(actor_future);
                     let res_specs = serde_json::json!({
@@ -572,5 +561,14 @@ impl MessageResponse<Lobby, Games> for (Vec<(String, ShuuroGame)>, Collection<Sh
         if let Some(tx) = tx {
             tx.send(self);
         }
+    }
+}
+
+impl Handler<Restart> for Lobby {
+    type Result = ();
+
+    fn handle(&mut self, _msg: Restart, _ctx: &mut Self::Context) -> Self::Result {
+        let res = serde_json::json!({"t": "live_restart"});
+        self.send_message_to_all(res);
     }
 }

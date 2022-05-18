@@ -100,8 +100,7 @@ pub async fn news(
                 return web::Json(json!({"exist": true, "news": news}));
             }
         }
-        Err(_e) => {
-        }
+        Err(_e) => {}
     }
     web::Json(json!({"exist": false}))
 }
@@ -130,9 +129,4 @@ pub async fn user_games(
         Err(_e) => {}
     }
     web::Json(json!({"exist": false}))
-}
-
-pub async fn test(_: Session) -> impl Responder {
-    let now = OffsetDateTime::now_utc();
-    web::Json(json!({ "d": now.to_string()}))
 }
