@@ -5,6 +5,7 @@ mod websockets;
 
 use std::sync::Mutex;
 
+use lichess::model::curr_url;
 use mongodb::{Collection, Database};
 use time::Duration;
 
@@ -40,7 +41,7 @@ async fn main() -> std::io::Result<()> {
         let (users, shuuro_games, news_) = get_cols(&db);
         let key = read_key();
         App::new()
-            .data(Mutex::new(AppState::new(users, news_, shuuro_games, key.1)))
+            .data(Mutex::new(AppState::new(users, news_, shuuro_games, key.1, key.2)))
             .data(lobby.clone())
             .wrap(
                 RedisSession::new("127.0.0.1:6379", &key.0)
@@ -63,11 +64,7 @@ async fn main() -> std::io::Result<()> {
 }
 
 pub fn get_cors(prod: bool) -> Cors {
-    let addr: &str = if prod {
-        "https://lishuuro.org"
-    } else {
-        "http://localhost:3000"
-    };
+    let addr: &str = curr_url(prod).1; 
     let cors = Cors::default()
         .allow_any_header()
         .allowed_origin(addr)

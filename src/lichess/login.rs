@@ -9,6 +9,8 @@ use url::Url;
 
 use crate::lichess::model::{LoginData, PostLoginToken, Token};
 
+use super::model::curr_url;
+
 fn sha256(buffer: String) -> GenericArray<u8, U32> {
     let mut hasher = Sha256::new();
     hasher.update(buffer.as_bytes());
@@ -33,18 +35,20 @@ pub fn create_challenge(verifier: &String) -> String {
 }
 
 /// Start of login process.
-pub fn login_url(login_state: &String) -> (Url, String) {
+pub fn login_url(login_state: &String, prod: bool) -> (Url, String) {
     let url = "https://lichess.org/oauth?";
     let verifier: String = create_verifier();
     let challenge: String = create_challenge(&verifier);
     let mut final_url = Url::parse(url).unwrap();
+    let r = format!("{}/callback", curr_url(prod).0);
+
     let queries = [
         ("state", login_state.as_str()),
         ("response_type", "code"),
-        ("client_id", "abc"),
+        ("client_id", "lishuuro"),
         (
             "redirect_uri",
-            &format!("https://lishuuro.org/w/callback")[..],
+            &r
         ),
         ("code_challenge", &challenge[..]),
         ("code_challenge_method", "S256"),
@@ -68,17 +72,20 @@ pub fn random_username() -> String {
 }
 
 /// Getting lichess token.
-pub async fn get_lichess_token(session: &Session, code: &str) -> Token {
+pub async fn get_lichess_token(session: &Session, code: &str, prod: bool) -> Token {
     let url = "https://lichess.org/api/token";
     let code_verifier = session.get::<String>("codeVerifier").ok().unwrap().unwrap();
     let body = PostLoginToken::new(code_verifier, code);
     let client = Client::default();
-    let res = client.post(url).send_json(&body.to_json()).await;
+    let res = client.post(url).send_json(&body.to_json(prod)).await;
     if let Ok(mut i) = res {
         let json = i.json::<Token>().await;
+
         if let Ok(tok) = json {
             return tok;
         }
+    }
+    else {
     }
     return Token::default();
 }

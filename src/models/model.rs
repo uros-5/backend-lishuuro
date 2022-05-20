@@ -24,6 +24,7 @@ pub struct AppState {
     pub games: Collection<ShuuroGame>,
     pub counter: u8,
     pub login_state: String,
+    pub prod: bool
 }
 
 impl AppState {
@@ -32,12 +33,14 @@ impl AppState {
         news: Collection<NewsItem>,
         games: Collection<ShuuroGame>,
         login_state: String,
+        prod: bool
     ) -> Self {
         AppState {
             users,
             news,
             games,
             login_state: login_state,
+            prod,
             counter: 0,
         }
     }

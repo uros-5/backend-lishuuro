@@ -17,10 +17,13 @@ impl<'a> PostLoginToken<'a> {
         }
     }
 
-    pub fn to_json(&self) -> Value {
+    pub fn to_json(&self, prod: bool) -> Value {
+        let uri = curr_url(prod);
+        let uri = format!("{}/callback", uri.0);
+        
         serde_json::json!({
             "grant_type": "authorization_code",
-            "redirect_uri": "http://lishuuro.org/w/callback",
+            "redirect_uri": uri.as_str(),
             "client_id": "lishuuro",
             "code": self.code,
             "code_verifier": self.code_verifier
@@ -30,7 +33,6 @@ impl<'a> PostLoginToken<'a> {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Token {
-    pub token_type: String,
     pub access_token: String,
     pub expires_in: i32,
 }
@@ -44,9 +46,16 @@ pub struct LoginData {
 impl Default for Token {
     fn default() -> Self {
         Token {
-            token_type: String::from(""),
             access_token: String::from(""),
             expires_in: 0,
         }
+    }
+}
+
+pub fn curr_url(prod: bool) -> (&'static str, &'static str)  {
+    if prod {
+        ("https://lishuuro.org/ws", "https://lishuuro.org")
+    } else {
+        ("http://localhost:8080", "http://localhost:3000")
     }
 }

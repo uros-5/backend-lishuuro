@@ -11,7 +11,7 @@ use serde_json::json;
 use time::OffsetDateTime;
 
 use crate::{
-    lichess::login::*,
+    lichess::{login::*, model::curr_url},
     models::model::{AppState, ShuuroGame, User},
     models::redis_session::*,
 };
@@ -26,8 +26,9 @@ pub async fn login(
     session: Session,
     app_data: web::Data<Mutex<AppState>>,
 ) -> impl Responder {
-    let login_state = &app_data.lock().unwrap().login_state;
-    let (lichess_url, verifier) = login_url(login_state);
+    let app_data = &app_data.lock().unwrap();
+    let login_state = &app_data.login_state;
+    let (lichess_url, verifier) = login_url(login_state, app_data.prod);
     set_value(&session, "codeVerifier", &verifier).await;
     HttpResponse::Found()
         .header(http::header::LOCATION, lichess_url.to_string())
@@ -41,10 +42,11 @@ pub async fn callback<'a>(
     app_data: web::Data<Mutex<AppState>>,
 ) -> impl Responder {
     let app_data = app_data.lock().unwrap();
+    let r = curr_url(app_data.prod);
     let query_code = querify(req.query_string());
     if query_code.len() > 0 {
         for i in query_code {
-            let lichess_token = get_lichess_token(&session, i.1).await;
+            let lichess_token = get_lichess_token(&session, i.1, app_data.prod).await;
             if lichess_token.access_token != "" {
                 let lichess_user = get_lichess_user(lichess_token.access_token).await;
                 if lichess_user != "" {
@@ -73,8 +75,9 @@ pub async fn callback<'a>(
             break;
         }
     }
+    let r = format!("{}/logged", r.1);
     HttpResponse::Found()
-        .header(http::header::LOCATION, "https://lishuuro.org/logged")
+        .header(http::header::LOCATION, r.as_str())
         .finish()
         .into_body()
 }
