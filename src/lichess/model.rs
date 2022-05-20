@@ -54,7 +54,7 @@ impl Default for Token {
 
 pub fn curr_url(prod: bool) -> (&'static str, &'static str)  {
     if prod {
-        ("https://lishuuro.org/ws", "https://lishuuro.org")
+        ("https://lishuuro.org/w", "https://lishuuro.org")
     } else {
         ("http://localhost:8080", "http://localhost:3000")
     }
