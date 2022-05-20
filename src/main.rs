@@ -36,7 +36,7 @@ async fn main() -> std::io::Result<()> {
     let (users, shuuro_games, news_) = get_cols(&db);
     let lobby = Lobby::new(users, shuuro_games, news_).start();
     let temp_address = lobby.clone();
-    let s = HttpServer::new(move || {
+    let _s = HttpServer::new(move || {
         let (users, shuuro_games, news_) = get_cols(&db);
         let key = read_key();
         App::new()
@@ -47,7 +47,7 @@ async fn main() -> std::io::Result<()> {
                     .cookie_max_age(Some(Duration::days(365)))
                     .ttl(172800),
             )
-            .wrap(get_cors())
+            .wrap(get_cors(key.2))
             .route("/login", web::get().to(login))
             .route("/callback", web::get().to(callback))
             .route("/vue_user", web::get().to(vue_user))
@@ -62,10 +62,15 @@ async fn main() -> std::io::Result<()> {
     Ok(())
 }
 
-pub fn get_cors() -> Cors {
+pub fn get_cors(prod: bool) -> Cors {
+    let addr: &str = if prod {
+        "https://lishuuro.org"
+    } else {
+        "http://localhost:3000"
+    };
     let cors = Cors::default()
         .allow_any_header()
-        .allowed_origin("http://localhost:3000")
+        .allowed_origin(addr)
         .allow_any_method()
         .supports_credentials();
     cors
