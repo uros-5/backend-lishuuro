@@ -64,7 +64,7 @@ async fn main() -> std::io::Result<()> {
 
 pub fn get_cors(prod: bool) -> Cors {
     let addr: &str = if prod {
-        "http://lishuuro.org"
+        "https://lishuuro.org"
     } else {
         "http://localhost:3000"
     };
