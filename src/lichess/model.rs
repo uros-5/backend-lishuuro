@@ -20,8 +20,8 @@ impl<'a> PostLoginToken<'a> {
     pub fn to_json(&self) -> Value {
         serde_json::json!({
             "grant_type": "authorization_code",
-            "redirect_uri": "http://localhost:8080/callback",
-            "client_id": "abc",
+            "redirect_uri": "http://lishuuro.org/w/callback",
+            "client_id": "lishuuro",
             "code": self.code,
             "code_verifier": self.code_verifier
         })

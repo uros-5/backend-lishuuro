@@ -74,7 +74,7 @@ pub async fn callback<'a>(
         }
     }
     HttpResponse::Found()
-        .header(http::header::LOCATION, "http://localhost:3000/logged")
+        .header(http::header::LOCATION, "https://lishuuro.org/logged")
         .finish()
         .into_body()
 }

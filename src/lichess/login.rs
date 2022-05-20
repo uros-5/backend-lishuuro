@@ -44,7 +44,7 @@ pub fn login_url(login_state: &String) -> (Url, String) {
         ("client_id", "abc"),
         (
             "redirect_uri",
-            &format!("http://localhost:8080/callback")[..],
+            &format!("https://lishuuro.org/w/callback")[..],
         ),
         ("code_challenge", &challenge[..]),
         ("code_challenge_method", "S256"),
