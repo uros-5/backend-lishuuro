@@ -455,7 +455,7 @@ impl Handler<Connect> for Lobby {
             );
             self.send_message(
                 &player.0.clone(),
-                cnt!("active_game_count", self.games.shuuro_games),
+                cnt!("active_games_count", self.games.shuuro_games),
             );
         }
     }
