@@ -16,10 +16,21 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tower-http = { version = "0.3.0", features = ["fs", "trace"] }
 headers = "0.3"
 axum-typed-websockets = "0.4.0"
+shuuro = "0.5.93"
+glicko2 = "0.3.1"
+json_value_merge = "1.1.2"
+sha2 = "0.10.1"
+hex-literal = "0.2.1"
+base64 = "0.13.0"
+rand = "0.8.4"
+url = "2.2.2"
+querystring = "1.1.0"
+time = { version = "0.2", features = ["serde"] }
+serde_with = "1.14.0"
 
 [dependencies.mongodb]
 version = "2.2.2"
 default-features = false
-features = ["async-std-runtime", "sync"]
+features = ["async-std-runtime"]
 
 
