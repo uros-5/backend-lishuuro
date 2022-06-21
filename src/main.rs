@@ -1,40 +1,35 @@
-mod database;
-mod lichess;
-mod websockets;
 mod controller;
+mod lichess;
+mod models;
 
-use axum::{
-    routing::{get, post},
-    extract::{Extension},
-    http::StatusCode,
-    response::IntoResponse,
-    Json, Router,
-};
-use std::sync::{Arc,RwLock};
-use std::net::SocketAddr;
 use controller::*;
 
+use axum::{routing::get, Extension, Router};
+use std::{
+    net::SocketAddr,
+    sync::{Arc, RwLock},
+};
+
+use crate::controller::rdb;
+use crate::models::redis::RedisSessions;
 
 #[tokio::main]
 async fn main() {
-    // initialize tracing
-    tracing_subscriber::fmt::init();
-
     // build our application with a route
-    let mut counter: Arc<RwLock<i32>> = Arc::new(RwLock::new(0));
+    let redis_store = RedisSessions::new().await;
+    let redis_store = RwLock::new(redis_store);
+    let redis_store: rdb = Arc::new(redis_store);
     let app = Router::new()
-        // `GET /` goes to `root`
         .route("/login", get(login))
-        // `POST /users` goes to `create_user`
-        .route("/callback", get(callback))
+        .route("/callback/:id", get(callback))
         .route("/vue_user", get(vue_user))
+        .route("/user_games", get(user_games))
         .route("/news", get(news))
-        .layer(Extension(counter));
+        .layer(Extension(redis_store));
 
-    // run our app with hyper
-    // `axum::Server` is a re-export of `hyper::Server`
+    // run it
     let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
-    tracing::debug!("listening on {}", addr);
+    println!("listening on {}", addr);
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await

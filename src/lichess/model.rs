@@ -1,5 +1,7 @@
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
 
 // LICHESS MODEL
 
@@ -11,6 +13,7 @@ pub struct PostLoginToken<'a> {
 
 impl<'a> PostLoginToken<'a> {
     pub fn new(code_verifier: String, code: &'a str) -> Self {
+        
         PostLoginToken {
             code,
             code_verifier,
