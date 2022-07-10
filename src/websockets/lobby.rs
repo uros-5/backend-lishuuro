@@ -170,6 +170,14 @@ impl Handler<RegularMessage> for Lobby {
                             }
                         }
                         return ();
+                    } else if t == "active_players_full" {
+                        let players = &self.active_players;
+                        let mut r: Vec<String> = vec![];
+                        for i in &*players {
+                            r.push(i.0.username());
+                        }
+                        res = serde_json::json!({"t": t, "players": r});
+                        return self.send_message(&msg.player, res);
                     } else if t == "active_players_count" {
                         res = cnt!(t, self.active_players);
                     } else if t == "active_games_count" {
@@ -412,7 +420,7 @@ impl Handler<RegularMessage> for Lobby {
                                 }
                             }
                         }
-                    }  else {
+                    } else {
                         return (); //res = serde_json::json!({"t": "error"});
                     }
                 }
