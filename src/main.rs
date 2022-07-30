@@ -1,37 +1,32 @@
-mod controller;
-mod lichess;
-mod models;
-
-use controller::*;
-
-use axum::{routing::get, Extension, Router};
+use axum::{http::HeaderValue, routing::get, Extension, Router};
+use hyper::{header::SET_COOKIE, HeaderMap};
+use serde::Serialize;
 use std::{
     net::SocketAddr,
     sync::{Arc, RwLock},
 };
 
-use crate::controller::rdb;
-use crate::models::redis::RedisSessions;
+mod database;
+mod lichess;
+mod routes;
+
+use database::redis::RedisCli;
 
 #[tokio::main]
 async fn main() {
     // build our application with a route
-    let redis_store = RedisSessions::new().await;
-    let redis_store = RwLock::new(redis_store);
-    let redis_store: rdb = Arc::new(redis_store);
+    let redis = RedisCli::default();
     let app = Router::new()
-        .route("/login", get(login))
-        .route("/callback/:id", get(callback))
-        .route("/vue_user", get(vue_user))
-        .route("/user_games", get(user_games))
-        .route("/news", get(news))
-        .layer(Extension(redis_store));
+        .route("/s", get(nesto))
+        .layer(Extension(redis));
 
     // run it
-    let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
-    println!("listening on {}", addr);
+    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    println!("listening on http://{}", addr);
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await
         .unwrap();
 }
+
+async fn nesto() {}
