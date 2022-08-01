@@ -24,7 +24,7 @@ pub async fn login(
 ) -> Redirect {
     let url = login_url(&key.login_state, key.prod);
     user.update(&url.1.as_str());
-    redis.set_session(&user.code_verifier, user.clone());
+    redis.set_session(&user.session, user.clone()).await;
     Redirect::permanent(url.0.as_str())
 }
 pub async fn callback(
@@ -33,8 +33,9 @@ pub async fn callback(
     Extension(key): Extension<Arc<MyKey>>,
     Extension(redis): Extension<Arc<RedisCli>>,
     user: UserSession,
-) {
+) -> Redirect {
     let r = curr_url(key.prod);
+    let r = format!("{}/logged", r.1);
     if let Some(code) = params.get(&String::from("code")) {
         let lichess_token = get_lichess_token(code, &user.code_verifier, key.prod).await;
         if lichess_token.access_token != "" {
@@ -42,13 +43,13 @@ pub async fn callback(
             if lichess_user != "" {
                 let player = player_exist(&db.players, &lichess_user, &user).await;
                 if let Some(player) = player {
-                    let r = format!("{}/logged", r.1);
                     let session = &player.session.clone();
                     redis.set_session(session, player).await;
                 }
             }
         }
     }
+    Redirect::permanent(r.as_str())
 }
 
 pub async fn vue_user(user: UserSession) -> (HeaderMap, Json<VueUser>) {

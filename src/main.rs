@@ -19,7 +19,6 @@ async fn main() {
     let redis = Arc::new(RedisCli::default());
     let mongo = Arc::new(Database::new().await);
     let my_key = Arc::new(MyKey::default());
-    println!("{}", &my_key.login_state);
     let app = Router::new()
         .route("/login", get(login))
         .route("/callback", get(callback))

@@ -32,13 +32,14 @@ pub async fn player_exist(
 
     if let Ok(player) = exist {
         let mut session = UserSession::from(session);
+        session.is_new = true;
         session.username(username);
         session.register();
         if let Some(_) = player{
             return Some(session);
         } else {
             let player = Player::from(&session);
-            db.insert_one(player, None).await;
+            let player = db.insert_one(player, None).await;
             return Some(session);
         }
     }

@@ -83,6 +83,7 @@ impl RedisCli {
             if let Ok(s) = con.get::<String, String>(String::from(key)) {
                 if let Ok(mut value) = serde_json::from_str::<UserSession>(&s) {
                     value.not_new();
+                    self.set_session(key, value.clone()).await;
                     return Some(value);
                 }
             }
@@ -97,7 +98,9 @@ impl RedisCli {
                 serde_json::to_string(&value).unwrap(),
             )
             .unwrap();
-            con.expire::<String, usize>(String::from(key), self.ttl_days(value.reg));
+            if value.is_new {
+                con.expire::<String, usize>(String::from(key), self.ttl_days(value.reg));
+            }
         }
     }
 
@@ -177,7 +180,7 @@ impl From<&UserSession> for UserSession {
             username: String::from(&other.username),
             reg: other.reg,
             code_verifier: String::from(&other.code_verifier),
-            session: String::from(&other.code_verifier),
+            session: String::from(&other.session),
             is_new: other.is_new,
         }
     }
