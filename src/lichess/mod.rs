@@ -1,8 +1,11 @@
+use std::fs::File;
+use std::path::Path;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub mod login;
-mod login_helpers;
+pub mod login_helpers;
 
 #[derive(Debug)]
 /// Token returned by lichess server.
@@ -54,6 +57,27 @@ impl Default for Token {
         Token {
             access_token: String::from(""),
             expires_in: 0,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MyKey {
+    pub prod: bool,
+    pub login_state: String,
+}
+
+impl Default for MyKey {
+    fn default() -> Self {
+        let fp = Path::new("src/lichess/my_key.json");
+        if let Ok(f) = File::open(fp) {
+            if let Ok(my_key) = serde_json::from_reader::<File, MyKey>(f) {
+                return my_key;
+            }
+        }
+        MyKey {
+            prod: false,
+            login_state: String::from("jeste"),
         }
     }
 }

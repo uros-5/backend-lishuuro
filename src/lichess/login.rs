@@ -24,6 +24,7 @@ pub fn login_url(login_state: &String, prod: bool) -> (Url, String) {
         ("code_challenge", &challenge[..]),
         ("code_challenge_method", "S256"),
     ];
+
     for i in queries {
         final_url.query_pairs_mut().append_pair(i.0, i.1);
     }
@@ -43,9 +44,8 @@ pub fn random_username() -> String {
 }
 
 /// Getting lichess token.
-pub async fn get_lichess_token(code: &String, prod: bool) -> Token {
+pub async fn get_lichess_token(code: &String, code_verifier: &String, prod: bool) -> Token {
     let url = "https://lichess.org/api/token";
-    let code_verifier = String::from("code_verifier");
     let body = PostLoginToken::new(&code_verifier, code);
     let client = Client::default();
     let req = client
