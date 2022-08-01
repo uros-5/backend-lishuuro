@@ -98,9 +98,7 @@ impl RedisCli {
                 serde_json::to_string(&value).unwrap(),
             )
             .unwrap();
-            if value.is_new {
-                con.expire::<String, usize>(String::from(key), self.ttl_days(value.reg));
-            }
+                let e = con.expire::<String, usize>(String::from(key), self.ttl_days(value.reg));
         }
     }
 

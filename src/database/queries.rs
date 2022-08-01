@@ -35,7 +35,7 @@ pub async fn player_exist(
         session.is_new = true;
         session.username(username);
         session.register();
-        if let Some(_) = player{
+        if let Some(_) = player {
             return Some(session);
         } else {
             let player = Player::from(&session);

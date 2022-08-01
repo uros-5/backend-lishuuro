@@ -49,10 +49,7 @@ pub async fn get_lichess_token(code: &String, code_verifier: &String, prod: bool
     let body = PostLoginToken::new(&code_verifier, code);
     let body = body.to_json(prod);
     let client = Client::default();
-    let req = client
-        .post(url)
-        .json(&body)
-        .send();
+    let req = client.post(url).json(&body).send();
     if let Ok(mut i) = req.await {
         let json = i.json::<Token>().await;
 
