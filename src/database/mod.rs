@@ -9,6 +9,7 @@ pub mod redis;
 
 // MONGODB MODELS
 
+#[derive(Clone)]
 pub struct Database {
     pub players: Collection<Player>,
     pub articles: Collection<Article>,
@@ -16,7 +17,7 @@ pub struct Database {
 }
 
 impl Database {
-    async fn new() -> Self {
+    pub async fn new() -> Self {
         let mut client_options = ClientOptions::parse("mongodb://127.0.0.1:27017")
             .await
             .expect("No client available");
