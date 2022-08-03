@@ -1,32 +1,33 @@
 use axum::{http::HeaderValue, routing::get, Extension, Router};
-use hyper::{header::SET_COOKIE, HeaderMap};
-use serde::Serialize;
-use std::{net::SocketAddr, sync::Arc};
-use tower_http::cors::{Any, Cors, CorsLayer};
+use std::{
+    net::SocketAddr,
+    sync::{Arc, Mutex, MutexGuard},
+};
+use tower_http::cors::CorsLayer;
 
 mod database;
 mod lichess;
 mod routes;
 
 use database::redis::RedisCli;
-use database::Database;
+use database::mongo::Mongo;
 use lichess::{curr_url, MyKey};
 use routes::{callback, login, vue_user};
+
+use crate::database::Database;
 
 #[tokio::main]
 async fn main() {
     // build our application with a route
-    let redis = Arc::new(RedisCli::default());
-    let mongo = Arc::new(Database::new().await);
-    let my_key = Arc::new(MyKey::default());
+    let db = Database::new().await;
+    let cors_layer = cors(&db.key);
+    let db = Arc::new(db);
     let app = Router::new()
         .route("/login", get(login))
         .route("/callback", get(callback))
         .route("/vue_user", get(vue_user))
-        .layer(Extension(redis))
-        .layer(Extension(mongo))
-        .layer(cors(&my_key))
-        .layer(Extension(my_key));
+        .layer(Extension(db))
+        .layer(cors_layer);
 
     // run it
     let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
@@ -39,7 +40,7 @@ async fn main() {
 
 fn cors(key: &MyKey) -> CorsLayer {
     let addr = curr_url(key.prod);
-    let mut cors = CorsLayer::new();
+    let cors = CorsLayer::new();
     cors.allow_origin(addr.1.parse::<HeaderValue>().unwrap())
         .allow_credentials(true)
 }

@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex, MutexGuard},
+};
 
 use axum::{extract::Query, http::HeaderValue, response::Redirect, Extension, Json};
 use hyper::{header::SET_COOKIE, HeaderMap};
@@ -8,7 +11,7 @@ use crate::{
     database::{
         queries::player_exist,
         redis::{RedisCli, UserSession, VueUser, AXUM_SESSION_COOKIE_NAME},
-        Database,
+        mongo::Mongo, Database,
     },
     lichess::{
         curr_url,
@@ -19,21 +22,25 @@ use crate::{
 
 pub async fn login(
     mut user: UserSession,
-    redis: Extension<Arc<RedisCli>>,
-    Extension(key): Extension<Arc<MyKey>>,
+    Extension(db): Extension<Arc<Database>>,
 ) -> Redirect {
+    let key = &db.key;
+    let mut redis = db.redis.clone();
     let url = login_url(&key.login_state, key.prod);
     user.update(&url.1.as_str());
-    redis.set_session(&user.session, user.clone()).await;
+    redis
+        .set_session(&user.session, user.clone())
+        .await;
     Redirect::permanent(url.0.as_str())
 }
 pub async fn callback(
     Query(params): Query<HashMap<String, String>>,
     Extension(db): Extension<Arc<Database>>,
-    Extension(key): Extension<Arc<MyKey>>,
-    Extension(redis): Extension<Arc<RedisCli>>,
     user: UserSession,
 ) -> Redirect {
+    let key = &db.key;
+    let mongo = &db.mongo;
+    let mut redis = db.redis.clone();
     let r = curr_url(key.prod);
     let r = format!("{}/logged", r.1);
     if let Some(code) = params.get(&String::from("code")) {
@@ -41,7 +48,7 @@ pub async fn callback(
         if lichess_token.access_token != "" {
             let lichess_user = get_lichess_user(lichess_token.access_token).await;
             if lichess_user != "" {
-                let player = player_exist(&db.players, &lichess_user, &user).await;
+                let player = player_exist(&mongo.players, &lichess_user, &user).await;
                 if let Some(player) = player {
                     let session = &player.session.clone();
                     redis.set_session(session, player).await;

@@ -7,15 +7,12 @@ use axum::{
 };
 use bson::DateTime;
 use hyper::{header::SET_COOKIE, HeaderMap, StatusCode};
-use mongodb::Collection;
-use redis::{Client, Cmd, Commands};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::{sync::Arc, time::Duration};
+use mongodb::{Collection};
+use redis::{aio::ConnectionManager, AsyncCommands, Client};
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
-use crate::lichess::login::random_username;
-use crate::lichess::login_helpers::create_verifier;
-
-use super::{queries::create_player, Database, Player};
+use super::{mongo::Mongo, mongo::Player, queries::create_player, Database};
 
 pub const AXUM_SESSION_COOKIE_NAME: &str = "axum_session";
 
@@ -65,44 +62,44 @@ impl UserSession {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct RedisCli {
-    cli: Client,
-}
-
-impl Default for RedisCli {
-    fn default() -> Self {
-        let cli = Client::open("redis://127.0.0.1/").unwrap();
-        Self { cli }
-    }
+    con: ConnectionManager,
 }
 
 impl RedisCli {
-    pub async fn get_session(&self, key: &str) -> Option<UserSession> {
-        if let Ok(mut con) = self.cli.get_connection() {
-            if let Ok(s) = con.get::<String, String>(String::from(key)) {
-                if let Ok(mut value) = serde_json::from_str::<UserSession>(&s) {
-                    value.not_new();
-                    self.set_session(key, value.clone()).await;
-                    return Some(value);
-                }
+    pub async fn default() -> Self {
+        let cli = Client::open("redis://127.0.0.1/").unwrap();
+        let con = ConnectionManager::new(cli).await.unwrap();
+        Self { con }
+    }
+
+    pub async fn get_session(&mut self, key: &str) -> Option<UserSession> {
+        if let Ok(s) = self.con.get::<String, String>(String::from(key)).await {
+            if let Ok(mut value) = serde_json::from_str::<UserSession>(&s) {
+                value.not_new();
+                self.set_session(key, value.clone()).await;
+                return Some(value);
             }
         }
         None
     }
 
-    pub async fn set_session(&self, key: &str, value: UserSession) {
-        if let Ok(mut con) = self.cli.get_connection() {
-            con.set::<String, String, String>(
+    pub async fn set_session(&mut self, key: &str, value: UserSession) {
+        self.con
+            .set::<String, String, String>(
                 String::from(key),
                 serde_json::to_string(&value).unwrap(),
             )
+            .await
             .unwrap();
-                let e = con.expire::<String, usize>(String::from(key), self.ttl_days(value.reg));
-        }
+        let e = self
+            .con
+            .expire::<String, usize>(String::from(key), self.ttl_days(value.reg))
+            .await;
     }
 
-    pub async fn new_session(&self, players: &Collection<Player>) -> UserSession {
+    pub async fn new_session(&mut self, players: &Collection<Player>) -> UserSession {
         let username = create_player(players).await;
         loop {
             let s = Session::new();
@@ -132,18 +129,15 @@ where
     type Rejection = (StatusCode, &'static str);
 
     async fn from_request(req: &mut RequestParts<B>) -> Result<Self, Self::Rejection> {
-        let Extension(redis) = Extension::<Arc<RedisCli>>::from_request(req)
+        let Extension(mut db) = Extension::<Arc<Database>>::from_request(req)
             .await
-            .expect("redis missing");
-
-        let Extension(db) = Extension::<Arc<Database>>::from_request(req)
-            .await
-            .expect("database missing");
-
+            .expect("db is missing");
         let cookie = Option::<TypedHeader<Cookie>>::from_request(req)
             .await
             .unwrap();
-
+        
+        let mut redis = db.redis.clone();
+        
         let session_cookie = cookie
             .as_ref()
             .and_then(|cookie| cookie.get(AXUM_SESSION_COOKIE_NAME));
@@ -152,7 +146,7 @@ where
                 return Ok(session);
             }
         }
-        let session = redis.new_session(&db.players).await;
+        let session = redis.new_session(&db.mongo.players).await;
         return Ok(session);
     }
 }
