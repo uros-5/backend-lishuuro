@@ -1,20 +1,19 @@
 use axum::{http::HeaderValue, routing::get, Extension, Router};
 use std::{
     net::SocketAddr,
-    sync::{Arc, Mutex, MutexGuard},
+    sync::{Arc},
 };
 use tower_http::cors::CorsLayer;
 
 mod database;
 mod lichess;
 mod routes;
+mod websockets;
 
-use database::redis::RedisCli;
-use database::mongo::Mongo;
 use lichess::{curr_url, MyKey};
 use routes::{callback, login, vue_user};
 
-use crate::database::Database;
+use crate::{database::Database, websockets::websocket_handler};
 
 #[tokio::main]
 async fn main() {
@@ -26,6 +25,7 @@ async fn main() {
         .route("/login", get(login))
         .route("/callback", get(callback))
         .route("/vue_user", get(vue_user))
+        .route("/ws/", get(websocket_handler))
         .layer(Extension(db))
         .layer(cors_layer);
 
