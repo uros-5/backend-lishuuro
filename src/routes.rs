@@ -9,28 +9,25 @@ use querystring::querify;
 
 use crate::{
     database::{
+        mongo::Mongo,
         queries::player_exist,
         redis::{RedisCli, UserSession, VueUser, AXUM_SESSION_COOKIE_NAME},
-        mongo::Mongo, Database,
+        Database,
     },
     lichess::{
         curr_url,
         login::{get_lichess_token, get_lichess_user, login_url},
         MyKey,
     },
+    T,
 };
 
-pub async fn login(
-    mut user: UserSession,
-    Extension(db): Extension<Arc<Database>>,
-) -> Redirect {
+pub async fn login(mut user: UserSession, Extension(db): Extension<Arc<Database>>) -> Redirect {
     let key = &db.key;
     let mut redis = db.redis.clone();
     let url = login_url(&key.login_state, key.prod);
-    user.update(&url.1.as_str());
-    redis
-        .set_session(&user.session, user.clone())
-        .await;
+    user.new_cv(&url.1.as_str());
+    redis.set_session(&user.session, user.clone()).await;
     Redirect::permanent(url.0.as_str())
 }
 pub async fn callback(

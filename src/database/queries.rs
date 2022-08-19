@@ -31,9 +31,9 @@ pub async fn player_exist(
         .await;
 
     if let Ok(player) = exist {
-        let mut session = UserSession::from(session);
+        let mut session = session.clone();
         session.is_new = true;
-        session.username(username);
+        session.new_username(username);
         session.register();
         if let Some(_) = player {
             return Some(session);

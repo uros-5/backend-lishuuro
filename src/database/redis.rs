@@ -36,16 +36,16 @@ impl UserSession {
         }
     }
 
-    pub fn update(&mut self, code_verifier: &str) {
+    pub fn new_cv(&mut self, code_verifier: &str) {
         self.code_verifier = String::from(code_verifier);
+    }
+
+    pub fn new_username(&mut self, username: &str) {
+        self.username = String::from(username);
     }
 
     pub fn register(&mut self) {
         self.reg = true;
-    }
-
-    pub fn username(&mut self, username: &str) {
-        self.username = String::from(username);
     }
 
     pub fn not_new(&mut self) {
@@ -162,18 +162,6 @@ impl From<&UserSession> for VueUser {
         Self {
             username: String::from(&user.username),
             logged: user.reg,
-        }
-    }
-}
-
-impl From<&UserSession> for UserSession {
-    fn from(other: &UserSession) -> Self {
-        Self {
-            username: String::from(&other.username),
-            reg: other.reg,
-            code_verifier: String::from(&other.code_verifier),
-            session: String::from(&other.session),
-            is_new: other.is_new,
         }
     }
 }
