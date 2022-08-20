@@ -4,7 +4,10 @@ use serde_json::{json, Value};
 
 use crate::arc2;
 
-use super::rooms::{ChatRooms, Players};
+use super::{
+    rooms::{ChatRooms, Players},
+    ClientMessage,
+};
 use tokio::sync::broadcast;
 
 pub const VARIANTS: [&str; 1] = ["shuuro12"];
@@ -16,7 +19,7 @@ pub const DURATION_RANGE: [i64; 28] = [
 pub struct WsState {
     pub players: Players,
     pub chat: ChatRooms,
-    pub tx: broadcast::Sender<String>,
+    pub tx: broadcast::Sender<ClientMessage>,
 }
 
 impl Default for WsState {

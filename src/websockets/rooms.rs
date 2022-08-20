@@ -19,14 +19,14 @@ pub struct Players {
 impl Players {
     /// Adding one player
     pub fn add_player(&self, username: &str) -> usize {
-        let players = self.players.lock().unwrap();
+        let mut players = self.players.lock().unwrap();
         players.insert(String::from(username));
         players.len()
     }
 
     /// Removing player
     pub fn remove_player(&mut self, username: &String) -> usize {
-        let players = self.players.lock().unwrap();
+        let mut players = self.players.lock().unwrap();
         players.remove(username);
         players.len()
     }
@@ -42,7 +42,7 @@ impl Default for Players {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-struct ChatMsg {
+pub struct ChatMsg {
     username: String,
     time: String,
     msg: String,
@@ -81,7 +81,7 @@ pub struct ChatRooms {
 
 impl Default for ChatRooms {
     fn default() -> Self {
-        let messages = HashMap::default();
+        let mut messages = HashMap::default();
         messages.insert(String::from("home"), vec![]);
         let messages = arc2(messages);
         Self { messages }
@@ -129,7 +129,7 @@ impl ChatRooms {
                 if self.can_add(&chat, player) {
                     m.update(&player.username);
                     let res = m.response();
-                    chat.push(*m);
+                    chat.push(m.clone());
                     return Some(res);
                 }
             }

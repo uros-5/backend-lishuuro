@@ -2,7 +2,7 @@ use mongodb::Collection;
 
 use crate::lichess::login::random_username;
 
-use super::{redis::UserSession, mongo::Player};
+use super::{mongo::Player, redis::UserSession};
 
 use bson::{doc, DateTime};
 

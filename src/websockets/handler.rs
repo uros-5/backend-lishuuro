@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc, thread, time::Duration};
+use std::{collections::HashMap, sync::Arc};
 
 use axum::{
     extract::{
@@ -10,9 +10,12 @@ use axum::{
     Extension, TypedHeader,
 };
 use futures::{stream::SplitSink, SinkExt, StreamExt};
-use tokio::task::JoinHandle;
+use serde_json::Value;
 
-use crate::database::{redis::UserSession, Database};
+use crate::{
+    database::{redis::UserSession, Database},
+    websockets::ClientMessage,
+};
 
 use super::WsState;
 
@@ -30,11 +33,16 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
     let (mut sender, mut receiver) = stream.split();
 
     let mut rx = ws.tx.subscribe();
+    //ws.tx.send();
+    ws.players.add_player(&user.username);
 
     let mut send_task = tokio::spawn(async move {
         while let Ok(msg) = rx.recv().await {
-            // In any websocket error, break loop.
-            if sender.send(Message::Text(msg)).await.is_err() {
+            if sender
+                .send(Message::Text(msg.msg.to_string()))
+                .await
+                .is_err()
+            {
                 break;
             }
         }
@@ -43,24 +51,27 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
     let tx = ws.tx.clone();
 
     let mut recv_task = tokio::spawn(async move {
-        while let Some(Ok(Message::Text(text))) = receiver.next().await {
-            // Add username before message.
+        while let Some(Ok(msg)) = receiver.next().await {
+            match msg {
+                Message::Text(t) => {
+                    if let Ok(value) = serde_json::from_str::<Value>(&t) {
+                        let msg = ClientMessage::new(&user, value);
+                        tx.send(msg);
+                    }
+                }
+                Message::Close(_c) => {
+                    break;
+                }
+                _ => (),
+            }
         }
     });
-    println!("dead connection")
+
+    tokio::select! {
+        _ = (&mut send_task) => recv_task.abort(),
+        _ = (&mut recv_task) => send_task.abort()
+    }
+    println!("dead connection");
 }
 
-fn ping(mut sx: SplitSink<WebSocket, Message>) -> JoinHandle<()> {
-    let duration = Duration::new(5, 0);
-    tokio::spawn(async move {
-        loop {
-            let msg = vec![];
-            if sx.send(Message::Ping(msg)).await.is_err() {
-                break;
-            }
-            thread::sleep(duration);
-        }
-    })
-}
-
-fn da(h: HashMap<String, SplitSink<WebSocket, Message>>) {}
+fn da(m: &UserSession) {}

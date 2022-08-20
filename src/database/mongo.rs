@@ -4,7 +4,6 @@ use mongodb::{options::ClientOptions, Client, Collection};
 use serde::{ser::SerializeTuple, Deserialize, Deserializer, Serialize, Serializer};
 use std::time::Duration as StdD;
 
-
 // MONGODB MODELS
 
 #[derive(Clone)]

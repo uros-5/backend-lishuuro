@@ -7,7 +7,7 @@ use axum::{
 };
 use bson::DateTime;
 use hyper::{header::SET_COOKIE, HeaderMap, StatusCode};
-use mongodb::{Collection};
+use mongodb::Collection;
 use redis::{aio::ConnectionManager, AsyncCommands, Client};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -135,9 +135,9 @@ where
         let cookie = Option::<TypedHeader<Cookie>>::from_request(req)
             .await
             .unwrap();
-        
+
         let mut redis = db.redis.clone();
-        
+
         let session_cookie = cookie
             .as_ref()
             .and_then(|cookie| cookie.get(AXUM_SESSION_COOKIE_NAME));

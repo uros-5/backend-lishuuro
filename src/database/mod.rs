@@ -6,16 +6,16 @@ use std::time::Duration as StdD;
 
 use crate::lichess::MyKey;
 
-use self::{redis::RedisCli, mongo::Mongo};
+use self::{mongo::Mongo, redis::RedisCli};
 
+pub mod mongo;
 pub mod queries;
 pub mod redis;
-pub mod mongo;
 
 pub struct Database {
     pub redis: RedisCli,
     pub mongo: Mongo,
-    pub key: MyKey
+    pub key: MyKey,
 }
 
 impl Database {
@@ -26,4 +26,3 @@ impl Database {
         Self { redis, mongo, key }
     }
 }
-
