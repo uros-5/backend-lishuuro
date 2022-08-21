@@ -14,7 +14,7 @@ use serde_json::Value;
 
 use crate::{
     database::{redis::UserSession, Database},
-    websockets::{ClientMessage, SendTo},
+    websockets::{onconnect, ClientMessage, SendTo},
 };
 
 use super::WsState;
@@ -50,7 +50,8 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
     let (mut sender, mut receiver) = stream.split();
 
     let mut rx = ws.tx.subscribe();
-    let count = ws.players.add_player(&user.username);
+
+    //let count = ws.players.add_player(&user.username);
     let username = String::from(&user.username);
 
     let mut send_task = tokio::spawn(async move {
@@ -84,6 +85,7 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
 
     let tx = ws.tx.clone();
     let rx2 = ws.tx.subscribe();
+    onconnect(&ws, &user, &ws.tx, true);
 
     let mut recv_task = tokio::spawn(async move {
         while let Some(Ok(msg)) = receiver.next().await {
@@ -95,6 +97,7 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
                     }
                 }
                 Message::Close(_c) => {
+                    onconnect(&ws, &user, &ws.tx, false);
                     break;
                 }
                 _ => (),

@@ -25,7 +25,7 @@ impl Players {
     }
 
     /// Removing player
-    pub fn remove_player(&mut self, username: &String) -> usize {
+    pub fn remove_player(&self, username: &String) -> usize {
         let mut players = self.players.lock().unwrap();
         players.remove(username);
         players.len()
@@ -133,6 +133,14 @@ impl ChatRooms {
                     return Some(res);
                 }
             }
+        }
+        None
+    }
+
+    pub fn get_chat(&self, id: &String) -> Option<Vec<ChatMsg>> {
+        let chat = self.messages.lock().unwrap();
+        if let Some(chat) = chat.get(id) {
+            return Some(chat.clone());
         }
         None
     }
