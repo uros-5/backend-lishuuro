@@ -15,10 +15,10 @@ use serde_json::Value;
 
 use crate::{
     database::{redis::UserSession, Database},
-    websockets::{new_chat_msg, connecting, rooms::ChatMsg, ClientMessage, SendTo},
+    websockets::{connecting, new_chat_msg, rooms::ChatMsg, ClientMessage, SendTo},
 };
 
-use super::WsState;
+use super::{get_chat, get_players, get_players_count, remove_spectator, GameGet, WsState};
 
 macro_rules! send_or_break {
     ($sender: expr, $msg: expr, $arr: expr, $username: expr) => {
@@ -47,7 +47,7 @@ pub async fn websocket_handler(
     ws.on_upgrade(|socket| websocket(socket, db, live, user))
 }
 
-async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, mut user:  UserSession) {
+async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, mut user: UserSession) {
     let (mut sender, mut receiver) = stream.split();
 
     let mut rx = ws.tx.subscribe();
@@ -68,7 +68,6 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, mut u
                     send_or_break!(&mut sender, msg, empty, &username);
                 }
                 SendTo::Spectators(s) => {
-                    println!("heereeee");
                     send_or_break!(&mut sender, msg, s, &username);
                 }
                 SendTo::Players(p) => {
@@ -100,6 +99,18 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, mut u
                                 if t == "live_chat_message" {
                                     if let Ok(mut m) = serde_json::from_str::<ChatMsg>(&text) {
                                         new_chat_msg(&ws, &user, &tx, &mut m);
+                                    }
+                                } else if t == "live_chat_full" {
+                                    if let Ok(m) = serde_json::from_str::<GameGet>(&text) {
+                                        get_chat(&ws, &user, &tx, m.game_id);
+                                    }
+                                } else if t == "active_players_full" {
+                                    get_players(&ws, &user, &tx);
+                                } else if t == "active_players_count" {
+                                    get_players_count(&ws, &user, &tx);
+                                } else if t == "live_game_remove_spectator" {
+                                    if let Ok(m) = serde_json::from_str::<GameGet>(&text) {
+                                        remove_spectator(&ws, &user, &tx, &m.game_id);
                                     }
                                 }
                             }

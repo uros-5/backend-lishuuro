@@ -56,6 +56,10 @@ impl Players {
         }
         None
     }
+
+    pub fn get_players(&self) -> HashSet<String> {
+        self.players.lock().unwrap().clone()
+    }
 }
 
 impl Default for Players {
