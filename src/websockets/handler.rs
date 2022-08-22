@@ -10,19 +10,20 @@ use axum::{
     Extension, TypedHeader,
 };
 use futures::{stream::SplitSink, SinkExt, StreamExt};
+use serde::ser;
 use serde_json::Value;
 
 use crate::{
     database::{redis::UserSession, Database},
-    websockets::{onconnect, ClientMessage, SendTo},
+    websockets::{new_chat_msg, connecting, rooms::ChatMsg, ClientMessage, SendTo},
 };
 
 use super::WsState;
 
 macro_rules! send_or_break {
-    ($sender: expr, $msg: expr, $arr: expr) => {
+    ($sender: expr, $msg: expr, $arr: expr, $username: expr) => {
         if !$arr.len() == 0 {
-            if !$arr.contains(&$msg.username) {
+            if !$arr.contains($username) {
                 return ();
             }
         }
@@ -41,12 +42,12 @@ pub async fn websocket_handler(
     user_agent: Option<TypedHeader<UserAgent>>,
     Extension(db): Extension<Arc<Database>>,
     Extension(live): Extension<Arc<WsState>>,
-    user: UserSession,
+    mut user: UserSession,
 ) -> impl IntoResponse {
     ws.on_upgrade(|socket| websocket(socket, db, live, user))
 }
 
-async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user: UserSession) {
+async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, mut user:  UserSession) {
     let (mut sender, mut receiver) = stream.split();
 
     let mut rx = ws.tx.subscribe();
@@ -60,23 +61,24 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
             match &msg.to {
                 SendTo::Me => {
                     if &msg.username == &username {
-                        send_or_break!(&mut sender, msg, empty);
+                        send_or_break!(&mut sender, msg, empty, &username);
                     }
                 }
                 SendTo::All => {
-                    send_or_break!(&mut sender, msg, empty);
+                    send_or_break!(&mut sender, msg, empty, &username);
                 }
                 SendTo::Spectators(s) => {
-                    send_or_break!(&mut sender, msg, s);
+                    println!("heereeee");
+                    send_or_break!(&mut sender, msg, s, &username);
                 }
                 SendTo::Players(p) => {
-                    send_or_break!(&mut sender, msg, p);
+                    send_or_break!(&mut sender, msg, p, &username);
                 }
                 SendTo::SpectatorsAndPlayers(sp) => {
                     if sp.1.contains(&msg.username) {
-                        send_or_break!(&mut sender, msg, empty);
+                        send_or_break!(&mut sender, msg, empty, &username);
                     } else if sp.0.contains(&msg.username) {
-                        send_or_break!(&mut sender, msg, empty);
+                        send_or_break!(&mut sender, msg, empty, &username);
                     }
                 }
             }
@@ -85,19 +87,28 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
 
     let tx = ws.tx.clone();
     let rx2 = ws.tx.subscribe();
-    onconnect(&ws, &user, &ws.tx, true);
+    connecting(&ws, &user, &ws.tx, true);
 
     let mut recv_task = tokio::spawn(async move {
         while let Some(Ok(msg)) = receiver.next().await {
             match msg {
-                Message::Text(t) => {
-                    if let Ok(value) = serde_json::from_str::<Value>(&t) {
-                        let msg = ClientMessage::new(&user, value, SendTo::All);
-                        tx.send(msg);
+                Message::Text(text) => {
+                    if let Ok(value) = serde_json::from_str::<Value>(&text) {
+                        let data_type = &value["t"];
+                        match data_type {
+                            serde_json::Value::String(t) => {
+                                if t == "live_chat_message" {
+                                    if let Ok(mut m) = serde_json::from_str::<ChatMsg>(&text) {
+                                        new_chat_msg(&ws, &user, &tx, &mut m);
+                                    }
+                                }
+                            }
+                            _ => (),
+                        }
                     }
                 }
                 Message::Close(_c) => {
-                    onconnect(&ws, &user, &ws.tx, false);
+                    connecting(&ws, &user, &ws.tx, false);
                     break;
                 }
                 _ => (),
@@ -109,5 +120,4 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
         _ = (&mut send_task) => recv_task.abort(),
         _ = (&mut recv_task) => send_task.abort()
     }
-    println!("dead connection");
 }

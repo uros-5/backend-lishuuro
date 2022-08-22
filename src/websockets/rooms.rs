@@ -1,4 +1,4 @@
-use bson::DateTime;
+use bson::{spec, DateTime};
 use chrono::{Timelike, Utc};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -13,7 +13,7 @@ use crate::database::redis::UserSession;
 /// Struct containing active players and spectators
 pub struct Players {
     players: Arc<Mutex<HashSet<String>>>,
-    spectators: Arc<Mutex<HashMap<String, Vec<String>>>>,
+    spectators: Arc<Mutex<HashMap<String, HashSet<String>>>>,
 }
 
 impl Players {
@@ -30,38 +30,68 @@ impl Players {
         players.remove(username);
         players.len()
     }
+
+    pub fn add_spectator(&self, id: &String, username: &String) -> Option<usize> {
+        let mut spectators = self.spectators.lock().unwrap();
+        if let Some(mut s) = spectators.get_mut(id) {
+            s.insert(String::from(username));
+            return Some(s.len());
+        }
+        None
+    }
+
+    pub fn remove_spectator(&self, id: &String, username: &String) -> Option<usize> {
+        let mut spectators = self.spectators.lock().unwrap();
+        if let Some(mut s) = spectators.get_mut(id) {
+            s.remove(username);
+            return Some(s.len());
+        }
+        None
+    }
+
+    /// Get spectators.
+    pub fn get_spectators(&self, id: &str) -> Option<HashSet<String>> {
+        if let Some(s) = self.spectators.lock().unwrap().get(&String::from(id)) {
+            return Some(s.clone());
+        }
+        None
+    }
 }
 
 impl Default for Players {
     fn default() -> Self {
+        let mut spectators = HashMap::new();
+        spectators.insert(String::from("home"), HashSet::new());
         Self {
             players: arc2(HashSet::default()),
-            spectators: arc2(HashMap::new()),
+            spectators: arc2(spectators),
         }
     }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ChatMsg {
-    username: String,
-    time: String,
-    msg: String,
+    pub id: String,
+    pub user: String,
+    pub time: String,
+    pub message: String,
 }
 
 impl ChatMsg {
     /// Creating new message
-    fn new(username: String, time: String, msg: String) -> Self {
+    fn new(user: String, time: String, message: String, id: String) -> Self {
         Self {
-            username,
+            user,
             time,
-            msg,
+            message,
+            id,
         }
     }
 
     /// Formats date in format HH:MM
     pub fn update(&mut self, user: &String) {
         let now = Utc::now().time();
-        self.username = String::from(user);
+        self.user = String::from(user);
         self.time = format!("{}:{}", now.hour(), now.minute());
     }
 
@@ -95,7 +125,7 @@ impl ChatRooms {
             return false;
         }
         let count = chat.iter().fold(0, |mut acc, x| {
-            if &x.username == &player.username {
+            if &x.user == &player.username {
                 acc += 1;
             }
             acc
@@ -108,7 +138,7 @@ impl ChatRooms {
 
     /// Check if message length less than 50 chars.
     fn message_length(&self, m: &ChatMsg) -> bool {
-        if m.msg.len() > 0 && m.msg.len() < 50 {
+        if m.message.len() > 0 && m.message.len() < 50 {
             return true;
         }
         false

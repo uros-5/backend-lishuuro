@@ -23,6 +23,7 @@ pub struct UserSession {
     pub code_verifier: String,
     pub session: String,
     pub is_new: bool,
+    pub watches: String
 }
 
 impl UserSession {
@@ -33,6 +34,7 @@ impl UserSession {
             code_verifier: String::from(code_verifier),
             session: String::from(session),
             is_new: true,
+            watches: String::from("")
         }
     }
 

@@ -56,7 +56,6 @@ pub async fn callback(
 }
 
 pub async fn vue_user(user: UserSession) -> (HeaderMap, Json<VueUser>) {
-    println!("{}", &user.username);
     let headers = user.headers();
     (headers, Json(VueUser::from(&user)))
 }
