@@ -1,4 +1,3 @@
-use bson::{spec, DateTime};
 use chrono::{Timelike, Utc};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -33,7 +32,7 @@ impl Players {
 
     pub fn add_spectator(&self, id: &String, username: &String) -> Option<usize> {
         let mut spectators = self.spectators.lock().unwrap();
-        if let Some(mut s) = spectators.get_mut(id) {
+        if let Some(s) = spectators.get_mut(id) {
             s.insert(String::from(username));
             return Some(s.len());
         }
@@ -42,7 +41,7 @@ impl Players {
 
     pub fn remove_spectator(&self, id: &String, username: &String) -> Option<usize> {
         let mut spectators = self.spectators.lock().unwrap();
-        if let Some(mut s) = spectators.get_mut(id) {
+        if let Some(s) = spectators.get_mut(id) {
             s.remove(username);
             return Some(s.len());
         }
@@ -83,7 +82,7 @@ pub struct ChatMsg {
 
 impl ChatMsg {
     /// Creating new message
-    fn new(user: String, time: String, message: String, id: String) -> Self {
+    fn _new(user: String, time: String, message: String, id: String) -> Self {
         Self {
             user,
             time,
@@ -149,7 +148,7 @@ impl ChatRooms {
     }
 
     /// Format response for clients.
-    fn response(&mut self) -> Value {
+    fn _response(&mut self) -> Value {
         let mut first = serde_json::json!(&mut self.clone());
         let second = json!({ "t": "live_chat_message" });
         first.merge(second);

@@ -1,23 +1,17 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex, MutexGuard},
-};
+use std::{collections::HashMap, sync::Arc};
 
-use axum::{extract::Query, http::HeaderValue, response::Redirect, Extension, Json};
-use hyper::{header::SET_COOKIE, HeaderMap};
-use querystring::querify;
+use axum::{extract::Query, response::Redirect, Extension, Json};
+use hyper::HeaderMap;
 
 use crate::{
     database::{
-        mongo::Mongo,
         queries::player_exist,
-        redis::{RedisCli, UserSession, VueUser, AXUM_SESSION_COOKIE_NAME},
+        redis::{UserSession, VueUser},
         Database,
     },
     lichess::{
         curr_url,
         login::{get_lichess_token, get_lichess_user, login_url},
-        MyKey,
     },
 };
 

@@ -1,4 +1,4 @@
-use reqwest::{Client, Request, Url};
+use reqwest::{Client, Url};
 
 use super::{
     curr_url,
@@ -43,6 +43,17 @@ pub fn random_username() -> String {
     )
 }
 
+/// Generate random game id.
+pub fn random_game_id() -> String {
+    format!(
+        "{}",
+        encode(rand::thread_rng().gen::<[u8; 10]>())
+            .replace("+", "")
+            .replace("/", "")
+            .replace("=", "")
+    )
+}
+
 /// Getting lichess token.
 pub async fn get_lichess_token(code: &String, code_verifier: &String, prod: bool) -> Token {
     let url = "https://lichess.org/api/token";
@@ -50,13 +61,12 @@ pub async fn get_lichess_token(code: &String, code_verifier: &String, prod: bool
     let body = body.to_json(prod);
     let client = Client::default();
     let req = client.post(url).json(&body).send();
-    if let Ok(mut i) = req.await {
+    if let Ok(i) = req.await {
         let json = i.json::<Token>().await;
 
         if let Ok(tok) = json {
             return tok;
         }
-    } else {
     }
     return Token::default();
 }
@@ -70,7 +80,7 @@ pub async fn get_lichess_user(token: String) -> String {
         .header("Authorization", format!("Bearer {}", token))
         .send()
         .await;
-    if let Ok(mut i) = res {
+    if let Ok(i) = res {
         let json = i.json::<LoginData>().await;
         if let Ok(data) = json {
             return String::from(data.username);

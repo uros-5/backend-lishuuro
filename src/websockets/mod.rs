@@ -6,6 +6,7 @@ pub mod rooms;
 pub mod state;
 
 pub use client_messages::*;
+pub use games::*;
 pub use handler::*;
 pub use messages::*;
 pub use state::WsState;

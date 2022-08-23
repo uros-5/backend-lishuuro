@@ -12,7 +12,7 @@ use redis::{aio::ConnectionManager, AsyncCommands, Client};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use super::{mongo::Mongo, mongo::Player, queries::create_player, Database};
+use super::{mongo::Player, queries::create_player, Database};
 
 pub const AXUM_SESSION_COOKIE_NAME: &str = "axum_session";
 
@@ -46,7 +46,7 @@ impl UserSession {
         self.username = String::from(username);
     }
 
-    pub fn register(&mut self) {
+    pub fn new_register(&mut self) {
         self.reg = true;
     }
 
@@ -95,7 +95,7 @@ impl RedisCli {
             )
             .await
             .unwrap();
-        let e = self
+        let _e = self
             .con
             .expire::<String, usize>(String::from(key), self.ttl_days(value.reg))
             .await;
@@ -105,7 +105,7 @@ impl RedisCli {
         let username = create_player(players).await;
         loop {
             let s = Session::new();
-            if let Some(s) = self.get_session(s.id()).await {
+            if let Some(_) = self.get_session(s.id()).await {
             } else {
                 let value = UserSession::new(&username, s.id(), false, "");
                 self.set_session(s.id(), value.clone()).await;
@@ -131,7 +131,7 @@ where
     type Rejection = (StatusCode, &'static str);
 
     async fn from_request(req: &mut RequestParts<B>) -> Result<Self, Self::Rejection> {
-        let Extension(mut db) = Extension::<Arc<Database>>::from_request(req)
+        let Extension(db) = Extension::<Arc<Database>>::from_request(req)
             .await
             .expect("db is missing");
         let cookie = Option::<TypedHeader<Cookie>>::from_request(req)

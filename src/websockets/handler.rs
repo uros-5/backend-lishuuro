@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use axum::{
     extract::{
@@ -9,16 +9,18 @@ use axum::{
     response::IntoResponse,
     Extension, TypedHeader,
 };
-use futures::{stream::SplitSink, SinkExt, StreamExt};
-use serde::ser;
+use futures::{SinkExt, StreamExt};
 use serde_json::Value;
 
 use crate::{
     database::{redis::UserSession, Database},
-    websockets::{connecting, new_chat_msg, rooms::ChatMsg, ClientMessage, SendTo},
+    websockets::{connecting, new_chat_msg, rooms::ChatMsg, SendTo},
 };
 
-use super::{get_chat, get_players, get_players_count, remove_spectator, GameGet, WsState};
+use super::{
+    accept_game_req, add_game_req, get_all_game_reqs, get_chat, get_players, get_players_count,
+    remove_spectator, GameGet, GameRequest, WsState,
+};
 
 macro_rules! send_or_break {
     ($sender: expr, $msg: expr, $arr: expr, $username: expr) => {
@@ -39,15 +41,15 @@ macro_rules! send_or_break {
 
 pub async fn websocket_handler(
     ws: WebSocketUpgrade,
-    user_agent: Option<TypedHeader<UserAgent>>,
+    _user_agent: Option<TypedHeader<UserAgent>>,
     Extension(db): Extension<Arc<Database>>,
     Extension(live): Extension<Arc<WsState>>,
-    mut user: UserSession,
+    user: UserSession,
 ) -> impl IntoResponse {
     ws.on_upgrade(|socket| websocket(socket, db, live, user))
 }
 
-async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, mut user: UserSession) {
+async fn websocket(stream: WebSocket, _db: Arc<Database>, ws: Arc<WsState>, user: UserSession) {
     let (mut sender, mut receiver) = stream.split();
 
     let mut rx = ws.tx.subscribe();
@@ -85,7 +87,6 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, mut u
     });
 
     let tx = ws.tx.clone();
-    let rx2 = ws.tx.subscribe();
     connecting(&ws, &user, &ws.tx, true);
 
     let mut recv_task = tokio::spawn(async move {
@@ -111,6 +112,16 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, mut u
                                 } else if t == "live_game_remove_spectator" {
                                     if let Ok(m) = serde_json::from_str::<GameGet>(&text) {
                                         remove_spectator(&ws, &user, &tx, &m.game_id);
+                                    }
+                                } else if t == "home_lobby_add" {
+                                    if let Ok(g) = serde_json::from_str::<GameRequest>(&text) {
+                                        add_game_req(&ws, &user, &tx, g);
+                                    }
+                                } else if t == "home_lobby_full" {
+                                    get_all_game_reqs(&ws, &user, &tx);
+                                } else if t == "home_lobby_accept" {
+                                    if let Ok(g) = serde_json::from_str::<GameRequest>(&text) {
+                                        accept_game_req(&ws, &_db.mongo.games, &user, &tx, g).await;
                                     }
                                 }
                             }

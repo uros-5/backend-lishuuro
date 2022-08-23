@@ -1,9 +1,3 @@
-use async_session::chrono::Duration;
-use bson::DateTime;
-use mongodb::{options::ClientOptions, Client, Collection};
-use serde::{ser::SerializeTuple, Deserialize, Deserializer, Serialize, Serializer};
-use std::time::Duration as StdD;
-
 use crate::lichess::MyKey;
 
 use self::{mongo::Mongo, redis::RedisCli};

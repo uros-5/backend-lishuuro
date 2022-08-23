@@ -4,6 +4,8 @@ use mongodb::{options::ClientOptions, Client, Collection};
 use serde::{ser::SerializeTuple, Deserialize, Deserializer, Serialize, Serializer};
 use std::time::Duration as StdD;
 
+use crate::websockets::GameRequest;
+
 // MONGODB MODELS
 
 #[derive(Clone)]
@@ -72,8 +74,28 @@ pub struct ShuuroGame {
     pub status: i32,
     pub credits: [u16; 2],
     pub hands: [String; 2],
-    pub history: [(String, u8); 3],
     pub sfen: String,
+}
+
+impl From<(&GameRequest, &[String; 2], &str)> for ShuuroGame {
+    fn from(f: (&GameRequest, &[String; 2], &str)) -> Self {
+        let clock = Duration::seconds(60 * f.0.time + f.0.incr);
+        Self {
+            _id: String::from(f.2),
+            min: Duration::seconds(f.0.time * 60),
+            incr: Duration::seconds(f.0.incr),
+            players: f.1.clone(),
+            side_to_move: 0,
+            clocks: [clock, clock.clone()],
+            last_clock: DateTime::now(),
+            current_stage: 0,
+            result: String::from(""),
+            status: -2,
+            credits: [800, 800],
+            hands: [String::from(""), String::from("")],
+            sfen: String::from(""),
+        }
+    }
 }
 
 // Serde helpers
