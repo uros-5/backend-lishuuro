@@ -1,4 +1,5 @@
 use mongodb::Collection;
+use serde_json::Value;
 
 use crate::lichess::login::{random_game_id, random_username};
 
@@ -57,13 +58,18 @@ pub async fn game_exist(db: &Collection<ShuuroGame>) -> String {
     loop {
         let id = random_game_id();
         let filter = doc! {"_id": &id};
-        if let Ok(_) = db.find_one(filter, None).await {
-            continue;
+        if let Ok(r) = db.find_one(filter, None).await {
+            if let Some(g) = r {
+                continue;
+            }
         }
         return id;
     }
 }
 
-pub async fn add_game(db: &Collection<ShuuroGame>, game: &ShuuroGame) {
-    db.insert_one(game, None).await;
+pub async fn add_game_to_db(db: &Collection<ShuuroGame>, game: &ShuuroGame) -> Value {
+    if let Err(res) = db.insert_one(game, None).await {
+
+    }
+    serde_json::json!({"t": "live_game_start", "game_id": &game._id, "game_info": &game})
 }

@@ -7,7 +7,7 @@ use tokio::sync::broadcast::Sender;
 use crate::{
     database::{
         mongo::ShuuroGame,
-        queries::{add_game, game_exist},
+        queries::{add_game_to_db, game_exist},
         redis::UserSession,
     },
     lichess::login::random_game_id,
@@ -44,6 +44,7 @@ pub enum SendTo {
 }
 
 pub fn connecting(ws: &Arc<WsState>, user: &UserSession, tx: &Sender<ClientMessage>, con: bool) {
+    let mut s_count = 0;
     let count: usize = {
         if con {
             ws.players
@@ -52,7 +53,13 @@ pub fn connecting(ws: &Arc<WsState>, user: &UserSession, tx: &Sender<ClientMessa
         } else {
             ws.players
                 .remove_spectator(&String::from("home"), &user.username);
-            ws.players.remove_spectator(&user.watches, &user.username);
+            if let Some(s) = ws.players.remove_spectator(&user.watches, &user.username) {
+                s_count = s;
+            }
+            if let Some(r) = ws.game_reqs.remove("home_lobby_remove", &user.username) {
+                let cm = ClientMessage::new(user, r, SendTo::All);
+                let _ = tx.send(cm);
+            }
             ws.players.remove_player(&user.username)
         }
     };
@@ -156,22 +163,32 @@ pub fn remove_game_req(
     }
 }
 
-pub async fn accept_game_req(
+async fn accept_game_req(
     ws: &Arc<WsState>,
     db: &Collection<ShuuroGame>,
     user: &UserSession,
     tx: &Sender<ClientMessage>,
     game: GameRequest,
 ) {
-    if &game.username() == &user.username {
-        remove_game_req(ws, user, tx, &game.username);
-    } else {
-        remove_game_req(ws, user, tx, &user.username);
-        let shuuro_game = new_game(game, user, db).await;
-        add_game(db, &shuuro_game).await;
-        let res = serde_json::json!({"t": "live_game_start", "game_id": &shuuro_game._id, "game_info": &shuuro_game});
-        let cm = ClientMessage::new(user, res, SendTo::Players(shuuro_game.players.clone()));
-        let _ = tx.send(cm);
+    let shuuro_game = create_game(game, user, db).await;
+    let msg = add_game_to_db(db, &shuuro_game).await;
+    let cm = ClientMessage::new(user, msg, SendTo::Players(shuuro_game.players.clone()));
+    let count = ws.shuuro_games.add_game(shuuro_game); 
+    let _ = tx.send(cm);
+    let cm = ClientMessage::new(user, fmt_count("active_games_count", count), SendTo::All);
+    let _ = tx.send(cm);
+}
+
+pub async fn check_game_req(
+    ws: &Arc<WsState>,
+    db: &Collection<ShuuroGame>,
+    user: &UserSession,
+    tx: &Sender<ClientMessage>,
+    game: GameRequest,
+) {
+    remove_game_req(ws, user, tx, &user.username);
+    if &game.username() != &user.username {
+        accept_game_req(ws, db, user, tx, game).await;
     }
 }
 
@@ -185,8 +202,8 @@ fn fmt_count(id: &str, cnt: usize) -> Value {
     serde_json::json!({"t": id, "cnt": cnt })
 }
 
-async fn new_game(
-    mut game: GameRequest,
+async fn create_game(
+    game: GameRequest,
     user: &UserSession,
     db: &Collection<ShuuroGame>,
 ) -> ShuuroGame {

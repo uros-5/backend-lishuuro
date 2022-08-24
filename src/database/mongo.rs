@@ -2,6 +2,7 @@ use async_session::chrono::Duration;
 use bson::DateTime;
 use mongodb::{options::ClientOptions, Client, Collection};
 use serde::{ser::SerializeTuple, Deserialize, Deserializer, Serialize, Serializer};
+use shuuro::{Position, Shop};
 use std::time::Duration as StdD;
 
 use crate::websockets::GameRequest;
@@ -75,6 +76,9 @@ pub struct ShuuroGame {
     pub credits: [u16; 2],
     pub hands: [String; 2],
     pub sfen: String,
+    #[serde(skip_serializing)]
+    #[serde(skip_deserializing)]
+    pub shuuro: (Shop, Position, Position),
 }
 
 impl From<(&GameRequest, &[String; 2], &str)> for ShuuroGame {
@@ -94,6 +98,7 @@ impl From<(&GameRequest, &[String; 2], &str)> for ShuuroGame {
             credits: [800, 800],
             hands: [String::from(""), String::from("")],
             sfen: String::from(""),
+            shuuro: (Shop::default(), Position::default(), Position::default()),
         }
     }
 }

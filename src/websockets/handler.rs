@@ -18,7 +18,7 @@ use crate::{
 };
 
 use super::{
-    accept_game_req, add_game_req, get_all_game_reqs, get_chat, get_players, get_players_count,
+    check_game_req, add_game_req, get_all_game_reqs, get_chat, get_players, get_players_count,
     remove_spectator, GameGet, GameRequest, WsState,
 };
 
@@ -121,7 +121,7 @@ async fn websocket(stream: WebSocket, _db: Arc<Database>, ws: Arc<WsState>, user
                                     get_all_game_reqs(&ws, &user, &tx);
                                 } else if t == "home_lobby_accept" {
                                     if let Ok(g) = serde_json::from_str::<GameRequest>(&text) {
-                                        accept_game_req(&ws, &_db.mongo.games, &user, &tx, g).await;
+                                        check_game_req(&ws, &_db.mongo.games, &user, &tx, g).await;
                                     }
                                 }
                             }

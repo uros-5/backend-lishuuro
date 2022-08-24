@@ -3,11 +3,12 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use async_session::blake3::Hash;
 use json_value_merge::Merge;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::arc2;
+use crate::{arc2, database::mongo::ShuuroGame};
 
 pub const VARIANTS: [&str; 1] = ["shuuro12"];
 pub const DURATION_RANGE: [i64; 28] = [
@@ -54,7 +55,7 @@ impl GameRequest {
     }
 
     /// Returns player colors
-    pub fn colors(&mut self, other: &String) -> [String; 2] {
+    pub fn colors(&self, other: &String) -> [String; 2] {
         let mut c_s: [String; 2] = [String::from(""), String::from("")];
         let mut color = String::from(self.color());
         let other = String::from(other);
@@ -128,5 +129,33 @@ impl GameReqs {
 
     pub fn response(&self, all: Vec<GameRequest>) -> Value {
         json!({ "t": "home_lobby_full", "lobbyGames": all})
+    }
+}
+
+pub struct ShuuroGames {
+    all: Arc<Mutex<HashMap<String, ShuuroGame>>>,
+}
+
+impl Default for ShuuroGames {
+    fn default() -> Self {
+        Self {all: arc2(HashMap::new())}
+    }
+}
+
+impl ShuuroGames {
+    pub fn add_game(&self, game: ShuuroGame) -> usize {
+        let mut all = self.all.lock().unwrap();
+        all.insert(String::from(&game._id), game);
+        all.capacity()
+    }
+
+    pub fn remove_game(&self, id: &String) -> usize {
+        let mut all = self.all.lock().unwrap();
+        all.remove(id);
+        all.capacity()
+    }
+
+    pub fn game_count(&self) -> usize {
+        self.all.lock().unwrap().capacity()
     }
 }

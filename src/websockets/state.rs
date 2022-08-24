@@ -1,6 +1,6 @@
 use super::{
     rooms::{ChatRooms, Players},
-    ClientMessage, GameReqs,
+    ClientMessage, GameReqs, ShuuroGames,
 };
 use tokio::sync::broadcast;
 
@@ -8,6 +8,7 @@ pub struct WsState {
     pub players: Players,
     pub chat: ChatRooms,
     pub game_reqs: GameReqs,
+    pub shuuro_games: ShuuroGames,
     pub tx: broadcast::Sender<ClientMessage>,
 }
 
@@ -22,6 +23,7 @@ impl Default for WsState {
             chat,
             game_reqs,
             tx,
+            shuuro_games: ShuuroGames::default()
         }
     }
 }
