@@ -243,7 +243,6 @@ fn confirm_shop(ws: &Arc<WsState>, user: &UserSession, tx: &Sender<ClientMessage
                 let res = serde_json::json!({"t": "pause_confirmed", "confirmed": confirmed});
                 let cm = ClientMessage::new(user, res, SendTo::SpectatorsAndPlayers((s, p)));
                 let _ = tx.send(cm);
-                println!("confirmed");
             }
         }
     }

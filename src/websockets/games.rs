@@ -199,19 +199,14 @@ impl ShuuroGames {
     pub fn buy(&self, json: &GameGet, player: &String) -> Option<[bool; 2]> {
         let mut all = self.all.lock().unwrap();
         if let Some(game) = all.get_mut(&json.game_id) {
-            println!("match found");
             if let Some(p) = self.player_index(&game.players, player) {
-                println!("player found");
                 if let Some(m) = Move::from_sfen(&json.game_move) {
-                    println!("found move");
                     match m {
                         Move::Buy { piece } => {
-                            println!("found buy move");
-                            println!("{:?}, {}", &piece.color, p);
-                            if piece.color as usize == p {
-                                println!("bought!");
+                            if Color::from(p)  == piece.color {
                                 return game.shuuro.0.play(m);
                             }
+                            
                         }
                         _ => (),
                     }
@@ -232,12 +227,10 @@ impl ShuuroGames {
         if let Some(game) = self.all.lock().unwrap().get_mut(id) {
             if let Some(p) = self.player_index(&game.players, &user.username) {
                 let c = Color::from(p);
-                println!("{:?}", &c);
                 game.shuuro.0.confirm(c);
                 let mut confirmed = [false, false];
                 confirmed[0] = game.shuuro.0.is_confirmed(Color::White);
                 confirmed[1] = game.shuuro.0.is_confirmed(Color::Black);
-                println!("{:?}", confirmed);
                 return Some(confirmed);
             }
         }
