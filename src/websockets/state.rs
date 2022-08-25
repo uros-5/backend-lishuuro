@@ -23,7 +23,7 @@ impl Default for WsState {
             chat,
             game_reqs,
             tx,
-            shuuro_games: ShuuroGames::default()
+            shuuro_games: ShuuroGames::default(),
         }
     }
 }

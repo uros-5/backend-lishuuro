@@ -63,6 +63,7 @@ pub fn connecting(ws: &Arc<WsState>, user: &UserSession, tx: &Sender<ClientMessa
             ws.players.remove_player(&user.username)
         }
     };
+    shuuro_games_count(ws, user, tx, SendTo::Me);
     let value = serde_json::json!({ "t": "active_players_count", "cnt": count });
     let cm = ClientMessage::new(user, value, SendTo::All);
     let _ = tx.send(cm);
@@ -112,7 +113,7 @@ pub fn get_players(ws: &Arc<WsState>, user: &UserSession, tx: &Sender<ClientMess
 }
 
 pub fn get_players_count(ws: &Arc<WsState>, user: &UserSession, tx: &Sender<ClientMessage>) {
-    let res = fmt_count("active_players_count", ws.players.get_players().capacity());
+    let res = fmt_count("active_players", ws.players.get_players().len());
     let cm = ClientMessage::new(user, res, SendTo::Me);
     let _ = tx.send(cm);
 }
@@ -163,6 +164,17 @@ pub fn remove_game_req(
     }
 }
 
+pub fn shuuro_games_count(
+    ws: &Arc<WsState>,
+    user: &UserSession,
+    tx: &Sender<ClientMessage>,
+    to: SendTo,
+) {
+    let count = ws.shuuro_games.game_count();
+    let cm = ClientMessage::new(user, fmt_count("active_games", count), to);
+    let _ = tx.send(cm);
+}
+
 async fn accept_game_req(
     ws: &Arc<WsState>,
     db: &Collection<ShuuroGame>,
@@ -173,10 +185,9 @@ async fn accept_game_req(
     let shuuro_game = create_game(game, user, db).await;
     let msg = add_game_to_db(db, &shuuro_game).await;
     let cm = ClientMessage::new(user, msg, SendTo::Players(shuuro_game.players.clone()));
-    let count = ws.shuuro_games.add_game(shuuro_game); 
+    let count = ws.shuuro_games.add_game(shuuro_game);
     let _ = tx.send(cm);
-    let cm = ClientMessage::new(user, fmt_count("active_games_count", count), SendTo::All);
-    let _ = tx.send(cm);
+    shuuro_games_count(ws, user, tx, SendTo::All);
 }
 
 pub async fn check_game_req(
@@ -186,11 +197,44 @@ pub async fn check_game_req(
     tx: &Sender<ClientMessage>,
     game: GameRequest,
 ) {
-    remove_game_req(ws, user, tx, &user.username);
-    if &game.username() != &user.username {
+    if &game.username() == &user.username {
+        remove_game_req(ws, user, tx, &game.username);
+    } else {
+        remove_game_req(ws, user, tx, &game.username);
         accept_game_req(ws, db, user, tx, game).await;
     }
 }
+
+pub fn get_hand(ws: &Arc<WsState>, user: &UserSession, tx: &Sender<ClientMessage>, id: &String) {
+    if let Some(hand) = ws.shuuro_games.get_hand(id, &user) {
+        let msg = serde_json::json!({"t": "live_game_hand", "hand": hand});
+        let cm = ClientMessage::new(user, msg, SendTo::Me);
+        let _ = tx.send(cm);
+    }
+}
+
+pub fn get_confirmed(
+    ws: &Arc<WsState>,
+    user: &UserSession,
+    tx: &Sender<ClientMessage>,
+    id: &String,
+) {
+    if let Some(confirmed) = ws.shuuro_games.get_confirmed(id) {
+        let msg = serde_json::json!({"t": "live_game_confirmed", "confirmed": confirmed});
+        let cm = ClientMessage::new(user, msg, SendTo::Me);
+        let _ = tx.send(cm);
+    }
+}
+
+pub fn get_game(ws: &Arc<WsState>, user: &UserSession, tx: &Sender<ClientMessage>, id: &String) {
+    if let Some(game) = ws.shuuro_games.get_game(id) {
+        let res = serde_json::json!({"t": "live_game_start", "game_id": id, "game_info": &game});
+        let cm = ClientMessage::new(user, res, SendTo::Me);
+        let _ = tx.send(cm);
+    }
+}
+
+pub fn buy_piece(ws: &Arc<WsState>, user: &UserSession, tx: &Sender<ClientMessage>, id: &String) {}
 
 //Helper functions.
 fn fmt_chat(id: &String, chat: Vec<ChatMsg>) -> Value {

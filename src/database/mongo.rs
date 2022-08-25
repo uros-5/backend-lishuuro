@@ -79,6 +79,7 @@ pub struct ShuuroGame {
     #[serde(skip_serializing)]
     #[serde(skip_deserializing)]
     pub shuuro: (Shop, Position, Position),
+    pub history: (Vec<(String, u8)>, Vec<(String, u16)>, Vec<(String, u16)>),
 }
 
 impl From<(&GameRequest, &[String; 2], &str)> for ShuuroGame {
@@ -91,7 +92,7 @@ impl From<(&GameRequest, &[String; 2], &str)> for ShuuroGame {
             players: f.1.clone(),
             side_to_move: 0,
             clocks: [clock, clock.clone()],
-            last_clock: DateTime::now(),
+            last_clock: DateTime::now(), 
             current_stage: 0,
             result: String::from(""),
             status: -2,
@@ -99,6 +100,7 @@ impl From<(&GameRequest, &[String; 2], &str)> for ShuuroGame {
             hands: [String::from(""), String::from("")],
             sfen: String::from(""),
             shuuro: (Shop::default(), Position::default(), Position::default()),
+            history: (vec![], vec![], vec![]),
         }
     }
 }
