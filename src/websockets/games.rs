@@ -7,7 +7,7 @@ use async_session::blake3::Hash;
 use json_value_merge::Merge;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use shuuro::{Color, Move};
+use shuuro::{init, Color, Move};
 
 use crate::{
     arc2,
@@ -100,6 +100,7 @@ pub struct GameReqs {
 
 impl Default for GameReqs {
     fn default() -> Self {
+        init();
         Self {
             all: arc2(HashMap::new()),
         }
