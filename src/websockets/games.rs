@@ -3,7 +3,6 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use async_session::blake3::Hash;
 use json_value_merge::Merge;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -13,8 +12,6 @@ use crate::{
     arc2,
     database::{mongo::ShuuroGame, redis::UserSession},
 };
-
-use super::GameGet;
 
 use super::GameGet;
 
@@ -100,7 +97,6 @@ pub struct GameReqs {
 
 impl Default for GameReqs {
     fn default() -> Self {
-        init();
         Self {
             all: arc2(HashMap::new()),
         }
@@ -147,6 +143,7 @@ pub struct ShuuroGames {
 
 impl Default for ShuuroGames {
     fn default() -> Self {
+        init();
         Self {
             all: arc2(HashMap::new()),
         }
@@ -177,7 +174,6 @@ impl ShuuroGames {
                 return Some(String::from(&g.hands[index]));
             }
         }
-        println!("error he can't see hand");
         None
     }
 
@@ -200,25 +196,49 @@ impl ShuuroGames {
         None
     }
 
-    pub fn buy(&self, json: &GameGet, player: &String) -> Option<String> {
-        let all = self.all.lock().unwrap();
-        if let Some(mut game) = all.get_mut(&json.game_id) {
+    pub fn buy(&self, json: &GameGet, player: &String) -> Option<[bool; 2]> {
+        let mut all = self.all.lock().unwrap();
+        if let Some(game) = all.get_mut(&json.game_id) {
+            println!("match found");
             if let Some(p) = self.player_index(&game.players, player) {
+                println!("player found");
                 if let Some(m) = Move::from_sfen(&json.game_move) {
+                    println!("found move");
                     match m {
                         Move::Buy { piece } => {
+                            println!("found buy move");
+                            println!("{:?}, {}", &piece.color, p);
                             if piece.color as usize == p {
-                                game.shuuro.0.play(m);
-                                if let Some(lm) =
-                                    game.shuuro.0.get_sfen_history(&piece.color).last()
-                                {
-                                    return Some(String::from(&lm.0));
-                                }
+                                println!("bought!");
+                                return game.shuuro.0.play(m);
                             }
                         }
                         _ => (),
                     }
                 }
+            }
+        }
+        None
+    }
+
+    pub fn get_players(&self, id: &String) -> Option<[String; 2]> {
+        if let Some(game) = self.all.lock().unwrap().get(id) {
+            return Some(game.players.clone());
+        }
+        None
+    }
+
+    pub fn confirm(&self, id: &String, user: &UserSession) -> Option<[bool; 2]> {
+        if let Some(game) = self.all.lock().unwrap().get_mut(id) {
+            if let Some(p) = self.player_index(&game.players, &user.username) {
+                let c = Color::from(p);
+                println!("{:?}", &c);
+                game.shuuro.0.confirm(c);
+                let mut confirmed = [false, false];
+                confirmed[0] = game.shuuro.0.is_confirmed(Color::White);
+                confirmed[1] = game.shuuro.0.is_confirmed(Color::Black);
+                println!("{:?}", confirmed);
+                return Some(confirmed);
             }
         }
         None

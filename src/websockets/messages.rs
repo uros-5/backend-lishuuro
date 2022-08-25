@@ -13,7 +13,7 @@ use crate::{
     lichess::login::random_game_id,
 };
 
-use super::{rooms::ChatMsg, GameRequest, WsState};
+use super::{rooms::ChatMsg, GameGet, GameRequest, WsState};
 
 #[derive(Clone)]
 pub struct ClientMessage {
@@ -185,7 +185,9 @@ async fn accept_game_req(
     let shuuro_game = create_game(game, user, db).await;
     let msg = add_game_to_db(db, &shuuro_game).await;
     let cm = ClientMessage::new(user, msg, SendTo::Players(shuuro_game.players.clone()));
+    ws.players.new_spectators(&shuuro_game._id);
     let count = ws.shuuro_games.add_game(shuuro_game);
+
     let _ = tx.send(cm);
     shuuro_games_count(ws, user, tx, SendTo::All);
 }
@@ -234,7 +236,28 @@ pub fn get_game(ws: &Arc<WsState>, user: &UserSession, tx: &Sender<ClientMessage
     }
 }
 
-pub fn buy_piece(ws: &Arc<WsState>, user: &UserSession, tx: &Sender<ClientMessage>, id: &String) {}
+fn confirm_shop(ws: &Arc<WsState>, user: &UserSession, tx: &Sender<ClientMessage>, json: GameGet) {
+    if let Some(confirmed) = ws.shuuro_games.confirm(&json.game_id, user) {
+        if let Some(s) = ws.players.get_spectators(&json.game_id) {
+            if let Some(p) = ws.shuuro_games.get_players(&json.game_id) {
+                let res = serde_json::json!({"t": "pause_confirmed", "confirmed": confirmed});
+                let cm = ClientMessage::new(user, res, SendTo::SpectatorsAndPlayers((s, p)));
+                let _ = tx.send(cm);
+                println!("confirmed");
+            }
+        }
+    }
+}
+
+pub fn shop_move(ws: &Arc<WsState>, user: &UserSession, tx: &Sender<ClientMessage>, json: GameGet) {
+    if &json.game_move == "cc" {
+        confirm_shop(ws, user, tx, json);
+    } else if let Some(confirmed) = ws.shuuro_games.buy(&json, &user.username) {
+        if !confirmed.contains(&false) {
+            confirm_shop(ws, user, tx, json);
+        }
+    }
+}
 
 //Helper functions.
 fn fmt_chat(id: &String, chat: Vec<ChatMsg>) -> Value {

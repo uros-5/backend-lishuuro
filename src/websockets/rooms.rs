@@ -59,6 +59,10 @@ impl Players {
     pub fn get_players(&self) -> HashSet<String> {
         self.players.lock().unwrap().clone()
     }
+
+    pub fn new_spectators(&self, id: &String) {
+        self.spectators.lock().unwrap().insert(String::from(id), HashSet::new());
+    }
 }
 
 impl Default for Players {

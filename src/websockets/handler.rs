@@ -19,7 +19,7 @@ use crate::{
 
 use super::{
     add_game_req, check_game_req, get_all_game_reqs, get_chat, get_confirmed, get_game, get_hand,
-    get_players, get_players_count, remove_spectator, GameGet, GameRequest, WsState,
+    get_players, get_players_count, remove_spectator, GameGet, GameRequest, WsState, shop_move,
 };
 
 macro_rules! send_or_break {
@@ -135,8 +135,10 @@ async fn websocket(stream: WebSocket, _db: Arc<Database>, ws: Arc<WsState>, user
                                     if let Ok(g) = serde_json::from_str::<GameGet>(&text) {
                                         get_game(&ws, &user, &tx, &g.game_id);
                                     }
-                                } else if t == "live_game_buy" {
-                                    if let Ok(g) = serde_json::from_str::<GameGet>(&text) {}
+                                } else if t == "live_game_buy" || t == "live_game_confirm" {
+                                    if let Ok(g) = serde_json::from_str::<GameGet>(&text) {
+                                        shop_move(&ws, &user, &tx, g);
+                                    }
                                 }
                             }
                             _ => (),

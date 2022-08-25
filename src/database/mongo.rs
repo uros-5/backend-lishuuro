@@ -92,7 +92,7 @@ impl From<(&GameRequest, &[String; 2], &str)> for ShuuroGame {
             players: f.1.clone(),
             side_to_move: 0,
             clocks: [clock, clock.clone()],
-            last_clock: DateTime::now(), 
+            last_clock: DateTime::now(),
             current_stage: 0,
             result: String::from(""),
             status: -2,
