@@ -179,7 +179,6 @@ impl<'a> MessageHandler<'a> {
             if let Some(s) = self.ws.players.get_spectators(&json.game_id) {
                 if let Some(p) = self.ws.shuuro_games.get_players(&json.game_id) {
                     let res = serde_json::json!({"t": "pause_confirmed", "confirmed": confirmed});
-
                     self.send_msg(res, SendTo::SpectatorsAndPlayers((s, p)));
                 }
             }
@@ -189,10 +188,9 @@ impl<'a> MessageHandler<'a> {
     pub fn shop_move(&self, json: GameGet) {
         if &json.game_move == "cc" {
             self.confirm_shop(json);
-        } else if let Some(confirmed) = self.ws.shuuro_games.buy(&json, &self.user.username) {
-            if !confirmed.contains(&false) {
-                self.confirm_shop(json);
-            }
+        } else if let Some(_) = self.ws.shuuro_games.buy(&json, &self.user.username) {
+            self.confirm_shop(json);
+            // start deploy
         }
     }
     pub fn connecting(&self, con: bool) {

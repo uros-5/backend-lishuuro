@@ -153,7 +153,7 @@ impl ShuuroGames {
         all.len()
     }
 
-    pub fn remove_game(&self, id: &String) -> usize {
+    pub fn _remove_game(&self, id: &String) -> usize {
         let mut all = self.all.lock().unwrap();
         all.remove(id);
         all.len()
@@ -167,7 +167,8 @@ impl ShuuroGames {
         let all = self.all.lock().unwrap();
         if let Some(g) = all.get(id) {
             if let Some(index) = g.players.iter().position(|x| x == &user.username) {
-                return Some(String::from(&g.hands[index]));
+                let color = Color::from(index);
+                return Some(g.shuuro.0.to_sfen(color));
             }
         }
         None
@@ -199,8 +200,13 @@ impl ShuuroGames {
                 if let Some(m) = Move::from_sfen(&json.game_move) {
                     match m {
                         Move::Buy { piece } => {
-                            if Color::from(p) == piece.color {
-                                return game.shuuro.0.play(m);
+                            let color = Color::from(p);
+                            if color == piece.color {
+                                if let Some(confirmed) = game.shuuro.0.play(m) {
+                                    if confirmed[color as usize] == true {
+                                        return Some(confirmed);
+                                    }
+                                }
                             }
                         }
                         _ => (),
@@ -209,6 +215,25 @@ impl ShuuroGames {
             }
         }
         None
+    }
+
+    pub fn set_deploy(&self, id: &String) {
+        if let Some(game) = self.all.lock().unwrap().get_mut(id) {
+            game.current_stage = 1;
+            self.load_shop_hand(game);
+            game.shuuro.1.generate_plinths();
+            game.sfen = game.shuuro.1.to_sfen();
+        }
+
+    }
+
+    pub fn load_shop_hand(&self, game: &mut ShuuroGame) {
+        let w = game.shuuro.0.to_sfen(Color::White);
+        let b = game.shuuro.0.to_sfen(Color::Black);
+        let hand = format!("{}{}", w, b);
+        let sfen = "57/57/57/57/57/57/57/57/57/57/57/57 w";
+        game.shuuro.1.set_hand(hand.as_str());
+        game.shuuro.1.set_sfen(&sfen);
     }
 
     pub fn get_players(&self, id: &String) -> Option<[String; 2]> {
