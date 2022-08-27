@@ -61,7 +61,10 @@ impl Players {
     }
 
     pub fn new_spectators(&self, id: &String) {
-        self.spectators.lock().unwrap().insert(String::from(id), HashSet::new());
+        self.spectators
+            .lock()
+            .unwrap()
+            .insert(String::from(id), HashSet::new());
     }
 }
 

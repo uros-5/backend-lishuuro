@@ -61,25 +61,19 @@ impl GameRequest {
 
     /// Returns player colors
     pub fn colors(&self, other: &String) -> [String; 2] {
-        let mut c_s: [String; 2] = [String::from(""), String::from("")];
-        let mut color = String::from(self.color());
-        let other = String::from(other);
-        let me = self.username();
-        if color == "random" {
+        let c_s: [String; 2];
+        let mut color = String::from("");
+        if &self.color == "random" {
             color = self.random_color();
         }
         if color == "white" {
-            c_s = [me, other];
+            c_s = [String::from(&self.username), String::from(other)];
         }
         // this is black
         else {
-            c_s = [other, me];
+            c_s = [String::from(other), String::from(&self.username)];
         }
         c_s
-    }
-
-    pub fn color(&self) -> &String {
-        &self.color
     }
 
     fn random_color(&self) -> String {
@@ -107,9 +101,11 @@ impl GameReqs {
     pub fn add(&self, mut game: GameRequest) -> Option<Value> {
         let mut all = self.all.lock().unwrap();
         if !all.contains_key(&game.username) {
-            let res = game.response(&String::from("home_lobby_add"));
-            all.insert(String::from(&game.username), game.clone());
-            return Some(res);
+            if game.is_valid() {
+                let res = game.response(&String::from("home_lobby_add"));
+                all.insert(String::from(&game.username), game.clone());
+                return Some(res);
+            }
         }
         None
     }
@@ -203,10 +199,9 @@ impl ShuuroGames {
                 if let Some(m) = Move::from_sfen(&json.game_move) {
                     match m {
                         Move::Buy { piece } => {
-                            if Color::from(p)  == piece.color {
+                            if Color::from(p) == piece.color {
                                 return game.shuuro.0.play(m);
                             }
-                            
                         }
                         _ => (),
                     }
