@@ -235,7 +235,8 @@ impl<'a> MessageHandler<'a> {
         }
     }
     fn send_msg(&self, value: Value, to: SendTo) {
-        self.send_msg(value, to);
+        let cm = ClientMessage::new(self.user, value, to);
+        let _ = self.tx.send(cm);
     }
     async fn create_game(&self, game: GameRequest) -> ShuuroGame {
         let colors = game.colors(&self.user.username);

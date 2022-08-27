@@ -110,7 +110,7 @@ impl GameReqs {
         None
     }
 
-    pub fn remove(&self, t: &str, mut username: &String) -> Option<Value> {
+    pub fn remove(&self, t: &str, username: &String) -> Option<Value> {
         let mut all = self.all.lock().unwrap();
         if let Some(mut game) = all.remove(username) {
             let res = game.response(&String::from(t));
@@ -234,12 +234,5 @@ impl ShuuroGames {
 
     fn player_index(&self, p: &[String; 2], u: &String) -> Option<usize> {
         p.iter().position(|x| x == u)
-    }
-
-    fn player_color(&self, index: usize) -> Color {
-        if index == 0 {
-            return Color::White;
-        }
-        Color::Black
     }
 }
