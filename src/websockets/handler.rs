@@ -137,6 +137,10 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
                                     if let Ok(g) = serde_json::from_str::<GameGet>(&text) {
                                         handler.shop_move(g);
                                     }
+                                } else if t == "live_game_place" {
+                                    if let Ok(g) = serde_json::from_str::<GameGet>(&text) {
+                                        handler.place_move(g);
+                                    }
                                 }
                             }
                             _ => println!("{}", &text),

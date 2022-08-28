@@ -5,7 +5,7 @@ use serde::{ser::SerializeTuple, Deserialize, Deserializer, Serialize, Serialize
 use shuuro::{Position, Shop};
 use std::time::Duration as StdD;
 
-use crate::websockets::GameRequest;
+use crate::websockets::{GameRequest, TimeControl};
 
 // MONGODB MODELS
 
@@ -80,6 +80,9 @@ pub struct ShuuroGame {
     #[serde(skip_deserializing)]
     pub shuuro: (Shop, Position, Position),
     pub history: (Vec<(String, u8)>, Vec<(String, u16)>, Vec<(String, u16)>),
+    #[serde(skip_serializing)]
+    #[serde(skip_deserializing)]
+    pub tc: TimeControl,
 }
 
 impl From<(&GameRequest, &[String; 2], &str)> for ShuuroGame {
@@ -101,6 +104,7 @@ impl From<(&GameRequest, &[String; 2], &str)> for ShuuroGame {
             sfen: String::from(""),
             shuuro: (Shop::default(), Position::default(), Position::default()),
             history: (vec![], vec![], vec![]),
+            tc: TimeControl::new(f.0.time, f.0.incr),
         }
     }
 }

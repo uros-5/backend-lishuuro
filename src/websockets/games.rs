@@ -3,6 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use chrono::{DateTime, Duration, NaiveTime, Utc};
 use json_value_merge::Merge;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -217,23 +218,63 @@ impl ShuuroGames {
         None
     }
 
-    pub fn set_deploy(&self, id: &String) {
-        if let Some(game) = self.all.lock().unwrap().get_mut(id) {
-            game.current_stage = 1;
-            self.load_shop_hand(game);
-            game.shuuro.1.generate_plinths();
-            game.sfen = game.shuuro.1.to_sfen();
+    pub fn place_move(&self, json: &GameGet, player: &String) -> Option<(String, [String; 2])> {
+        let mut all = self.all.lock().unwrap();
+        if let Some(mut game) = all.get_mut(&json.game_id) {
+            if let Some(index) = self.player_index(&game.players, player) {
+                if index == game.side_to_move as usize {
+                    if let Some(gm) = Move::from_sfen(&json.game_move.as_str()) {
+                        match gm {
+                            Move::Put { to, piece } => {
+                                if Color::from(index) == piece.color {
+                                    if let Some(s) = game.shuuro.1.place(piece, to) {
+                                        if game.tc.click(index) {
+                                            return None;
+                                        }
+                                        return Some((s, game.players.clone()));
+                                    }
+                                }
+                            }
+                            _ => (),
+                        }
+                    }
+                }
+            }
         }
-
+        None
     }
 
-    pub fn load_shop_hand(&self, game: &mut ShuuroGame) {
+    pub fn set_deploy(&self, id: &String) -> Option<Value> {
+        if let Some(game) = self.all.lock().unwrap().get_mut(id) {
+            game.current_stage = 1;
+            let hand = self.load_shop_hand(game);
+            game.shuuro.1.generate_plinths();
+            game.sfen = game.shuuro.1.to_sfen();
+            game.side_to_move = 0;
+            let value = serde_json::json!({
+                "t": "redirect_deploy",
+                "path": format!("/shuuro/1/{}", id),
+                "hand": hand,
+                "last_clock": Utc::now(),
+                "side_to_move": "w",
+                "w": String::from(&game.players[0]),
+                "b": String::from(&game.players[1]),
+                "sfen": game.sfen
+            });
+            return Some(value);
+        }
+        None
+    }
+
+    pub fn load_shop_hand(&self, game: &mut ShuuroGame) -> String {
         let w = game.shuuro.0.to_sfen(Color::White);
         let b = game.shuuro.0.to_sfen(Color::Black);
+        game.hands = [w.clone(), b.clone()];
         let hand = format!("{}{}", w, b);
         let sfen = "57/57/57/57/57/57/57/57/57/57/57/57 w";
         game.shuuro.1.set_hand(hand.as_str());
         game.shuuro.1.set_sfen(&sfen);
+        hand
     }
 
     pub fn get_players(&self, id: &String) -> Option<[String; 2]> {
@@ -259,5 +300,55 @@ impl ShuuroGames {
 
     fn player_index(&self, p: &[String; 2], u: &String) -> Option<usize> {
         p.iter().position(|x| x == u)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TimeControl {
+    pub last_click: NaiveTime,
+    pub clocks: [Duration; 2],
+    pub stage: u8,
+    pub incr: Duration,
+}
+
+impl Default for TimeControl {
+    fn default() -> Self {
+        TimeControl::new(10, 5)
+    }
+}
+
+impl TimeControl {
+    pub fn new(time: i64, incr: i64) -> Self {
+        let duration = Duration::seconds(time * 60 + incr);
+        let last_click = Utc::now().time();
+        Self {
+            clocks: [duration, duration.clone()],
+            stage: 0,
+            incr: Duration::seconds(incr),
+            last_click,
+        }
+    }
+
+    pub fn update_stage(&mut self, stage: u8) {
+        self.stage = stage;
+        self.last_click = Utc::now().time();
+    }
+
+    pub fn click(&mut self, color: usize) -> bool {
+        let elapsed = self.elapsed();
+        if let Some(duration) = self.clocks[color].checked_sub(&elapsed) {
+            if duration.is_zero() {
+                return false;
+            }
+            self.clocks[color] = duration;
+            let duration = duration.checked_add(&self.incr).unwrap();
+            self.clocks[color] = self.incr;
+            return true;
+        }
+        false
+    }
+
+    fn elapsed(&self) -> Duration {
+        Utc::now().time() - self.last_click
     }
 }

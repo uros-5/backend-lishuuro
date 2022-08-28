@@ -174,25 +174,54 @@ impl<'a> MessageHandler<'a> {
         }
     }
 
-    fn confirm_shop(&self, json: GameGet) {
+    fn confirm_shop(&self, json: &GameGet) -> Option<[bool; 2]> {
         if let Some(confirmed) = self.ws.shuuro_games.confirm(&json.game_id, self.user) {
             if let Some(s) = self.ws.players.get_spectators(&json.game_id) {
                 if let Some(p) = self.ws.shuuro_games.get_players(&json.game_id) {
                     let res = serde_json::json!({"t": "pause_confirmed", "confirmed": confirmed});
                     self.send_msg(res, SendTo::SpectatorsAndPlayers((s, p)));
+                    return Some(confirmed);
                 }
             }
         }
+        None
     }
 
     pub fn shop_move(&self, json: GameGet) {
         if &json.game_move == "cc" {
-            self.confirm_shop(json);
-        } else if let Some(_) = self.ws.shuuro_games.buy(&json, &self.user.username) {
-            self.confirm_shop(json);
-            // start deploy
+            if let Some(confirmed) = self.confirm_shop(&json) {
+                self.set_deploy(&json, confirmed);
+            }
+        } else if let Some(confirmed) = self.ws.shuuro_games.buy(&json, &self.user.username) {
+            self.confirm_shop(&json);
+            self.set_deploy(&json, confirmed);
         }
     }
+
+    pub fn place_move(&self, json: GameGet) {
+        if let Some(m) = self.ws.shuuro_games.place_move(&json, &self.user.username) {
+            let mut res = serde_json::json!({
+                "t": "live_game_place",
+                "move": m.0,
+                "game_id": &json.game_id,
+                "to_fight": false,
+                "first_move_error": false,
+                "clocks": [140000, 140000]
+            });
+            self.send_msg(res, SendTo::Players(m.1))
+        }
+    }
+
+    fn set_deploy(&self, json: &GameGet, confirmed: [bool; 2]) {
+        if !confirmed.contains(&false) {
+            if let Some(res) = self.ws.shuuro_games.set_deploy(&json.game_id) {
+                let s = self.ws.players.get_spectators(&json.game_id).unwrap();
+                let p = self.ws.shuuro_games.get_players(&json.game_id).unwrap();
+                self.send_msg(res, SendTo::SpectatorsAndPlayers((s, p)));
+            }
+        }
+    }
+
     pub fn connecting(&self, con: bool) {
         let mut _s_count;
         let count: usize = {
@@ -232,6 +261,7 @@ impl<'a> MessageHandler<'a> {
             self.send_msg(value, SendTo::Me);
         }
     }
+
     fn send_msg(&self, value: Value, to: SendTo) {
         let cm = ClientMessage::new(self.user, value, to);
         let _ = self.tx.send(cm);
