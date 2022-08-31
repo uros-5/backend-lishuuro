@@ -1,11 +1,13 @@
 use async_session::chrono::Duration;
 use bson::DateTime;
+use chrono::TimeZone;
 use mongodb::{options::ClientOptions, Client, Collection};
 use serde::{ser::SerializeTuple, Deserialize, Deserializer, Serialize, Serializer};
+use shuuro::Color;
 use shuuro::{Position, Shop};
 use std::time::Duration as StdD;
 
-use crate::websockets::{GameRequest, TimeControl};
+use crate::websockets::{time_control::TimeControl, GameRequest};
 
 // MONGODB MODELS
 
@@ -80,8 +82,6 @@ pub struct ShuuroGame {
     #[serde(skip_deserializing)]
     pub shuuro: (Shop, Position, Position),
     pub history: (Vec<(String, u8)>, Vec<(String, u16)>, Vec<(String, u16)>),
-    #[serde(skip_serializing)]
-    #[serde(skip_deserializing)]
     pub tc: TimeControl,
 }
 
@@ -112,7 +112,7 @@ impl From<(&GameRequest, &[String; 2], &str)> for ShuuroGame {
 // Serde helpers
 
 /// Serializing from Duration to String
-fn duration_i32<S>(x: &Duration, s: S) -> Result<S::Ok, S::Error>
+pub fn duration_i32<S>(x: &Duration, s: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
@@ -121,7 +121,7 @@ where
 }
 
 /// Serializing from String to Duration
-fn i32_duration<'de, D>(data: D) -> Result<Duration, D::Error>
+pub fn i32_duration<'de, D>(data: D) -> Result<Duration, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -134,7 +134,7 @@ where
 }
 
 /// Serializing from [Duration; 2] to String
-fn duration_i32_array<S>(x: &[Duration; 2], s: S) -> Result<S::Ok, S::Error>
+pub fn duration_i32_array<S>(x: &[Duration; 2], s: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
@@ -147,7 +147,7 @@ where
 }
 
 /// Deserializing from String to [Duration; 2]
-fn array_i32_duration<'de, D>(data: D) -> Result<[Duration; 2], D::Error>
+pub fn array_i32_duration<'de, D>(data: D) -> Result<[Duration; 2], D::Error>
 where
     D: Deserializer<'de>,
 {

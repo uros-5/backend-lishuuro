@@ -10,7 +10,7 @@ use crate::database::{
     Database,
 };
 
-use super::{rooms::ChatMsg, GameGet, GameRequest, WsState};
+use super::{rooms::ChatMsg, GameGet, GameRequest, LiveGameMove, WsState};
 
 #[derive(Clone)]
 pub struct ClientMessage {
@@ -174,41 +174,66 @@ impl<'a> MessageHandler<'a> {
         }
     }
 
-    fn confirm_shop(&self, json: &GameGet) -> Option<[bool; 2]> {
-        if let Some(confirmed) = self.ws.shuuro_games.confirm(&json.game_id, self.user) {
-            if let Some(s) = self.ws.players.get_spectators(&json.game_id) {
-                if let Some(p) = self.ws.shuuro_games.get_players(&json.game_id) {
-                    let res = serde_json::json!({"t": "pause_confirmed", "confirmed": confirmed});
-                    self.send_msg(res, SendTo::SpectatorsAndPlayers((s, p)));
-                    return Some(confirmed);
-                }
+    fn confirm_shop(&self, json: &GameGet, confirmed: &[bool; 2]) {
+        if let Some(s) = self.ws.players.get_spectators(&json.game_id) {
+            if let Some(p) = self.ws.shuuro_games.get_players(&json.game_id) {
+                let res = serde_json::json!({"t": "pause_confirmed", "confirmed": confirmed});
+                self.send_msg(res, SendTo::SpectatorsAndPlayers((s, p)));
             }
         }
-        None
     }
 
     pub fn shop_move(&self, json: GameGet) {
-        if &json.game_move == "cc" {
-            if let Some(confirmed) = self.confirm_shop(&json) {
-                self.set_deploy(&json, confirmed);
+        if let Some(confirmed) = self.ws.shuuro_games.buy(&json, &self.user.username) {
+            match confirmed {
+                LiveGameMove::BuyMove(confirmed) => {
+                    self.confirm_shop(&json, &confirmed);
+                    self.set_deploy(&json, confirmed);
+                }
+                LiveGameMove::LostOnTime(p) => {
+                    println!("{} lost", p);
+                }
+                _ => (),
             }
-        } else if let Some(confirmed) = self.ws.shuuro_games.buy(&json, &self.user.username) {
-            self.confirm_shop(&json);
-            self.set_deploy(&json, confirmed);
         }
     }
 
     pub fn place_move(&self, json: GameGet) {
         if let Some(m) = self.ws.shuuro_games.place_move(&json, &self.user.username) {
-            let mut res = serde_json::json!({
-                "t": "live_game_place",
-                "move": m.0,
-                "game_id": &json.game_id,
-                "to_fight": false,
-                "first_move_error": false,
-                "clocks": [140000, 140000]
-            });
-            self.send_msg(res, SendTo::Players(m.1))
+            if let LiveGameMove::PlaceMove(mv, clocks, fme, tf, p) = m {
+                let mut res = serde_json::json!({
+                    "t": "live_game_place",
+                    "move": mv,
+                    "game_id": &json.game_id,
+                    "to_fight": tf,
+                    "first_move_error": fme,
+                    "clocks": clocks
+                });
+                if let Some(s) = self.ws.players.get_spectators(&json.game_id) {
+                    self.send_msg(res, SendTo::SpectatorsAndPlayers((s, p)));
+                }
+            }
+        }
+    }
+
+    pub fn fight_move(&self, json: GameGet) {
+        if let Some(m) = self.ws.shuuro_games.fight_move(&json, &self.user.username) {
+            if let LiveGameMove::FightMove(m, clocks,status,result ,players , o) = m {
+                let  res = serde_json::json!({
+                    "t": "live_game_play",
+                    "game_move": m,
+                    "status": status,
+                    "game_id": json.game_id,
+                    "clocks": clocks,
+                    "outcome": o
+                });
+                if let Some(s) = self.ws.players.get_spectators(&json.game_id) {
+                    self.send_msg(res, SendTo::SpectatorsAndPlayers((s,players)));
+                }
+                else {
+                    self.send_msg(res, SendTo::Players(players));
+                }
+            }
         }
     }
 
@@ -262,10 +287,11 @@ impl<'a> MessageHandler<'a> {
         }
     }
 
-    fn send_msg(&self, value: Value, to: SendTo) {
+    pub fn send_msg(&self, value: Value, to: SendTo) {
         let cm = ClientMessage::new(self.user, value, to);
         let _ = self.tx.send(cm);
     }
+
     async fn create_game(&self, game: GameRequest) -> ShuuroGame {
         let colors = game.colors(&self.user.username);
         let id = game_exist(&self.db.mongo.games).await;
