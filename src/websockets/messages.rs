@@ -166,8 +166,13 @@ impl<'a> MessageHandler<'a> {
         }
     }
 
-    pub fn get_game(&self, id: &String) {
-        if let Some(game) = self.ws.shuuro_games.get_game(id) {
+    pub async fn get_game(&self, id: &String) {
+        if let Some(game) = self
+            .ws
+            .shuuro_games
+            .get_game(id, &self.db.mongo.games)
+            .await
+        {
             let res =
                 serde_json::json!({"t": "live_game_start", "game_id": id, "game_info": &game});
             self.send_msg(res, SendTo::Me);
@@ -201,7 +206,7 @@ impl<'a> MessageHandler<'a> {
     pub fn place_move(&self, json: GameGet) {
         if let Some(m) = self.ws.shuuro_games.place_move(&json, &self.user.username) {
             if let LiveGameMove::PlaceMove(mv, clocks, fme, tf, p) = m {
-                let mut res = serde_json::json!({
+                let res = serde_json::json!({
                     "t": "live_game_place",
                     "move": mv,
                     "game_id": &json.game_id,
@@ -216,10 +221,10 @@ impl<'a> MessageHandler<'a> {
         }
     }
 
-    pub fn fight_move(&self, json: GameGet) {
+    pub async fn fight_move(&self, json: GameGet) {
         if let Some(m) = self.ws.shuuro_games.fight_move(&json, &self.user.username) {
-            if let LiveGameMove::FightMove(m, clocks,status,result ,players , o) = m {
-                let  res = serde_json::json!({
+            if let LiveGameMove::FightMove(m, clocks, status, _result, players, o) = m {
+                let res = serde_json::json!({
                     "t": "live_game_play",
                     "game_move": m,
                     "status": status,
@@ -227,10 +232,21 @@ impl<'a> MessageHandler<'a> {
                     "clocks": clocks,
                     "outcome": o
                 });
-                if let Some(s) = self.ws.players.get_spectators(&json.game_id) {
-                    self.send_msg(res, SendTo::SpectatorsAndPlayers((s,players)));
+                if status > 0 {
+                    self.ws
+                        .shuuro_games
+                        .remove_game(&self.db.mongo.games, &json.game_id)
+                        .await;
+                    self.shuuro_games_count(SendTo::All);
+                    if let Some(tv) = self.ws.players.get_spectators("tv") {
+                        let res =
+                            serde_json::json!({"t": "live_game_end", "game_id": &json.game_id});
+                        self.send_msg(res, SendTo::Spectators(tv));
+                    }
                 }
-                else {
+                if let Some(s) = self.ws.players.get_spectators(&json.game_id) {
+                    self.send_msg(res, SendTo::SpectatorsAndPlayers((s, players)));
+                } else {
                     self.send_msg(res, SendTo::Players(players));
                 }
             }

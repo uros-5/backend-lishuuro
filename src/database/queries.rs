@@ -65,6 +65,8 @@ pub async fn game_exist(db: &Collection<ShuuroGame>) -> String {
 }
 
 pub async fn get_game_db(db: &Collection<ShuuroGame>, id: &String) -> Option<ShuuroGame> {
+    let db = db.clone();
+    let id = String::from(id);
     let filter = doc! {"_id": id};
     if let Ok(r) = db.find_one(filter, None).await {
         if let Some(g) = r {
@@ -77,4 +79,10 @@ pub async fn get_game_db(db: &Collection<ShuuroGame>, id: &String) -> Option<Shu
 pub async fn add_game_to_db(db: &Collection<ShuuroGame>, game: &ShuuroGame) -> Value {
     if let Err(_res) = db.insert_one(game, None).await {}
     serde_json::json!({"t": "live_game_start", "game_id": &game._id, "game_info": &game})
+}
+
+pub async fn update_entire_game(db: &Collection<ShuuroGame>, game: &ShuuroGame) {
+    let query = doc! {"_id": &game._id};
+    let update = doc! {"$set": bson::to_bson(&game).unwrap()};
+    db.update_one(query, update, None).await.ok();
 }

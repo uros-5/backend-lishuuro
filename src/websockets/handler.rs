@@ -131,7 +131,7 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
                                     }
                                 } else if t == "live_game_start" {
                                     if let Ok(g) = serde_json::from_str::<GameGet>(&text) {
-                                        handler.get_game(&g.game_id);
+                                        handler.get_game(&g.game_id).await;
                                     }
                                 } else if t == "live_game_buy" || t == "live_game_confirm" {
                                     if let Ok(g) = serde_json::from_str::<GameGet>(&text) {
@@ -143,7 +143,7 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
                                     }
                                 } else if t == "live_game_play" {
                                     if let Ok(g) = serde_json::from_str::<GameGet>(&text) {
-                                        handler.fight_move(g);
+                                        handler.fight_move(g).await;
                                     }
                                 }
                             }

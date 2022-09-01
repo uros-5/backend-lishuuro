@@ -1,7 +1,8 @@
 use chrono::{DateTime, Duration, FixedOffset, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::database::mongo::{array_i32_duration, duration_i32_array, ShuuroGame};
+use crate::database::mongo::ShuuroGame;
+use crate::database::serde_helpers::{array_i32_duration, duration_i32_array};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TimeControl {

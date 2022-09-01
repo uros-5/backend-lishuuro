@@ -5,6 +5,7 @@ use self::{mongo::Mongo, redis::RedisCli};
 pub mod mongo;
 pub mod queries;
 pub mod redis;
+pub mod serde_helpers;
 
 pub struct Database {
     pub redis: RedisCli,
