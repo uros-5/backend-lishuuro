@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use super::MessageHandler;
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct GameGet {
     pub t: String,
@@ -13,4 +15,9 @@ pub enum LiveGameMove {
     LostOnTime(usize),
     PlaceMove(String, [u64; 2], bool, bool, [String; 2]),
     FightMove(String, [u64; 2], i32, String, [String; 2], String),
+}
+
+#[derive(Clone)]
+pub enum MsgDatabase {
+    GetGame(String),
 }

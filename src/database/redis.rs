@@ -10,7 +10,9 @@ use hyper::{header::SET_COOKIE, HeaderMap, StatusCode};
 use mongodb::Collection;
 use redis::{aio::ConnectionManager, AsyncCommands, Client};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+
+use crate::arc2;
 
 use super::{mongo::Player, queries::create_player, Database};
 
@@ -23,7 +25,7 @@ pub struct UserSession {
     pub code_verifier: String,
     pub session: String,
     pub is_new: bool,
-    pub watches: String,
+    pub watches: Arc<Mutex<String>>,
 }
 
 impl UserSession {
@@ -34,7 +36,7 @@ impl UserSession {
             code_verifier: String::from(code_verifier),
             session: String::from(session),
             is_new: true,
-            watches: String::from(""),
+            watches: arc2(String::from("")),
         }
     }
 
@@ -61,6 +63,10 @@ impl UserSession {
             headers.insert(SET_COOKIE, HeaderValue::from_str(&cookie).unwrap());
         }
         headers
+    }
+
+    pub fn watch(&self, watching: &String) {
+        *self.watches.lock().unwrap() = String::from(watching);
     }
 }
 

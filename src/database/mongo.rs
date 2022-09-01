@@ -82,6 +82,9 @@ pub struct ShuuroGame {
     pub shuuro: (Shop, Position, Position),
     pub history: (Vec<(String, u8)>, Vec<(String, u16)>, Vec<(String, u16)>),
     pub tc: TimeControl,
+    #[serde(skip_serializing)]
+    #[serde(skip_deserializing)]
+    pub draws: [bool; 2],
 }
 
 impl From<(&GameRequest, &[String; 2], &str)> for ShuuroGame {
@@ -104,6 +107,7 @@ impl From<(&GameRequest, &[String; 2], &str)> for ShuuroGame {
             shuuro: (Shop::default(), Position::default(), Position::default()),
             history: (vec![], vec![], vec![]),
             tc: TimeControl::new(f.0.time, f.0.incr),
+            draws: [false, false],
         }
     }
 }

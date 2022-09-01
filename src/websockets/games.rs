@@ -6,19 +6,16 @@ use std::{
 use bson::DateTime as DT;
 use chrono::Utc;
 use mongodb::Collection;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use shuuro::{init, position::Outcome, Color, Move, PieceType};
 
 use crate::{
     arc2,
-    database::{
-        mongo::ShuuroGame,
-        queries::{get_game_db, update_entire_game},
-        redis::UserSession,
-    },
+    database::{mongo::ShuuroGame, queries::update_entire_game, redis::UserSession},
 };
 
-use super::{GameGet, LiveGameMove};
+use super::{GameGet, LiveGameMove, MessageHandler, MsgDatabase};
 
 pub struct ShuuroGames {
     all: Arc<Mutex<HashMap<String, ShuuroGame>>>,
@@ -46,7 +43,6 @@ impl ShuuroGames {
         let mut all = self.all.lock().unwrap();
         if let Some(game) = all.remove(id) {
             let db = db.clone();
-            
             tokio::spawn(async move {
                 update_entire_game(&db, &game).await;
             });
@@ -112,12 +108,12 @@ impl ShuuroGames {
                     let player_color = Color::from(p);
                     if player_color == piece.color {
                         if let Some(confirmed) = game.shuuro.0.play(m) {
+                            game.draws = [false, false];
                             if confirmed[player_color as usize] == true {
                                 return Some(LiveGameMove::BuyMove(confirmed));
                             }
                         }
                     } else {
-                        println!("player color is wrong");
                     }
                 }
                 _ => (),
@@ -171,7 +167,6 @@ impl ShuuroGames {
                     game.last_clock = DT::now();
                     return self.place_piece(json, index, clocks, game);
                 } else {
-                    println!("{} lost on time", index);
                 }
             }
         }
@@ -198,6 +193,7 @@ impl ShuuroGames {
                 Move::Put { to, piece } => {
                     if Color::from(index) == piece.color {
                         if let Some(s) = game.shuuro.1.place(piece, to) {
+                            game.draws = [false, false];
                             let mut fme = false;
                             let m = s.split("_").next().unwrap().to_string();
                             let tf = self.is_deployment_over(&game);
@@ -218,10 +214,7 @@ impl ShuuroGames {
                             ));
                         }
                     } else {
-                        println!(
-                            "wrong piece, winner {}",
-                            self.other_index(Color::from(index))
-                        );
+                        
                     }
                 }
                 _ => (),
@@ -252,11 +245,11 @@ impl ShuuroGames {
                     return None;
                 }
                 if let Some(clocks) = game.tc.click(index) {
+                    game.draws = [false, false];
                     game.clocks = game.tc.clocks;
                     game.last_clock = DT::now();
                     return self.make_move(json, game, index, clocks);
                 } else {
-                    println!("{} lost on time", index);
                 }
             }
         }
@@ -301,7 +294,6 @@ impl ShuuroGames {
                             }
                         }
                     } else {
-                        println!("wrong piece");
                     }
                 }
                 _ => (),
@@ -363,6 +355,23 @@ impl ShuuroGames {
         None
     }
 
+    /// DRAW PART
+
+    pub fn draw_req(&self, id: &String, username: &String) -> Option<(i8, [String; 2])> {
+        if let Some(game) = self.all.lock().unwrap().get_mut(id) {
+            if let Some(index) = self.player_index(&game.players, username) {
+                game.draws[index] = true;
+                if !game.draws.contains(&false) {
+                    game.status = 5;
+                    return Some((5, game.players.clone()));
+                } else {
+                    return Some((-2, game.players.clone()));
+                }
+            }
+        }
+        None
+    }
+
     // HELPER METHODS
 
     pub fn get_players(&self, id: &String) -> Option<[String; 2]> {
@@ -384,16 +393,82 @@ impl ShuuroGames {
     }
 
     /// Get live or archived game(if it exist).
-    pub async fn get_game(&self, id: &String, db: &Collection<ShuuroGame>) -> Option<ShuuroGame> {
-            let id = String::from(id);
-            let db = db.clone();
-            let all = self.all.lock().unwrap();
-            if let Some(g) = all.get(&id) {
-                return Some(g.clone());
-            } else if let Some(g) = get_game_db(&db, &id).await {
-                println!("here it is");
-                return Some(g);
+    pub async fn get_game<'a>(
+        &self,
+        id: &String,
+        _db: &Collection<ShuuroGame>,
+        s: &'a MessageHandler<'a>,
+    ) -> Option<ShuuroGame> {
+        let id = String::from(id);
+        let all = self.all.lock().unwrap();
+        if let Some(g) = all.get(&id) {
+            return Some(g.clone());
+        }
+        s.db_tx.send(MsgDatabase::GetGame(String::from(id)));
+
+        return None;
+    }
+
+    pub fn live_sfen(&self, id: &String) -> Option<(u8, String)> {
+        if let Some(g) = self.all.lock().unwrap().get(id) {
+            return Some((g.current_stage, String::from(&g.sfen)));
+        }
+        None
+    }
+
+    pub fn resign(&self, id: &String, username: &String) -> Option<[String; 2]> {
+        if let Some(g) = self.all.lock().unwrap().get_mut(id) {
+            if let Some(index) = self.player_index(&g.players, &username) {
+                g.status = 7;
+                g.result = Color::from(index).to_string();
+                g.tc.click(index);
+                g.last_clock = DT::now();
+                return Some(g.players.clone());
             }
-            return None;
+        }
+        None
+    }
+
+    pub fn get_tv(&self) -> Vec<TvGame> {
+        let c = 0;
+        let mut games = vec![];
+        let all = self.all.lock().unwrap();
+        for i in all.iter() {
+            if c == 20 {
+                break;
+            }
+            let f = &i.1.sfen;
+            if f == "" {
+                continue;
+            }
+            let id = &i.1._id;
+            let w = &i.1.players[0];
+            let b = &i.1.players[1];
+            let t = "live_tv";
+            let tv = TvGame::new(t, id, w, b, f);
+            games.push(tv);
+        }
+        games
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct TvGame {
+    pub t: String,
+    pub game_id: String,
+    pub w: String,
+    pub b: String,
+    pub sfen: String,
+}
+
+impl TvGame {
+    pub fn new(t: &str, game_id: &str, w: &str, b: &str, fen: &str) -> Self {
+        Self {
+            t: String::from(t),
+            game_id: String::from(game_id),
+            w: String::from(w),
+            b: String::from(b),
+            sfen: String::from(fen),
+        }
     }
 }

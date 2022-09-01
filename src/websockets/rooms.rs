@@ -66,12 +66,17 @@ impl Players {
             .unwrap()
             .insert(String::from(id), HashSet::new());
     }
+
+    pub fn remove_spectators(&self, id: &String) {
+        self.spectators.lock().unwrap().remove(id);
+    }
 }
 
 impl Default for Players {
     fn default() -> Self {
         let mut spectators = HashMap::new();
         spectators.insert(String::from("home"), HashSet::new());
+        spectators.insert(String::from("tv"), HashSet::new());
         Self {
             players: arc2(HashSet::default()),
             spectators: arc2(spectators),

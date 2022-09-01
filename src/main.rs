@@ -3,6 +3,7 @@ use std::{
     net::SocketAddr,
     sync::{Arc, Mutex},
 };
+use tokio::sync::Mutex as Mutex2;
 use tower_http::cors::CorsLayer;
 
 mod database;
@@ -36,7 +37,6 @@ async fn main() {
 
     // run it
     let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
-    println!("listening on http://{}/login", addr);
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await
@@ -52,4 +52,8 @@ fn cors(key: &MyKey) -> CorsLayer {
 
 pub fn arc2<T>(data: T) -> Arc<Mutex<T>> {
     Arc::new(Mutex::new(data))
+}
+
+pub fn arc3<T>(data: T) -> Arc<Mutex2<T>> {
+    Arc::new(Mutex2::new(data))
 }

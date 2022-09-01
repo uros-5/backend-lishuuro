@@ -11,21 +11,23 @@ use axum::{
 };
 use futures::{SinkExt, StreamExt};
 use serde_json::Value;
+use tokio::sync::broadcast;
 
 use crate::{
-    database::{redis::UserSession, Database},
+    database::{queries::get_game_db, redis::UserSession, Database},
     websockets::{rooms::ChatMsg, SendTo},
 };
 
-use super::{GameGet, GameRequest, MessageHandler, WsState};
+use super::{ClientMessage, GameGet, GameRequest, MessageHandler, MsgDatabase, WsState};
 
 macro_rules! send_or_break {
     ($sender: expr, $msg: expr, $arr: expr, $username: expr) => {
-        if !$arr.len() == 0 {
+        if $arr.len() != 0 {
             if !$arr.contains($username) {
-                return ();
+                return ;
             }
         }
+
         if $sender
             .send(Message::Text($msg.msg.to_string()))
             .await
@@ -51,8 +53,26 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
 
     let mut rx = ws.tx.subscribe();
 
+    let (db_tx, mut db_rx) = broadcast::channel(100);
+
     //let count = ws.players.add_player(&user.username);
     let username = String::from(&user.username);
+    let db2 = db.clone();
+    let tx2 = ws.tx.clone();
+    let user2 = user.clone();
+
+    let db_send_task = tokio::spawn(async move {
+        while let Ok(msg) = db_rx.recv().await {
+            match &msg {
+                MsgDatabase::GetGame(id) => {
+                    if let Some(game) = get_game_db(&db2.mongo.games, id).await {
+                        let msg = serde_json::json!({"t": "live_game_start", "game_id": id, "game_info": &game});
+                        let _ = tx2.send(ClientMessage::new(&user2, msg, SendTo::Me));
+                    }
+                }
+            }
+        }
+    });
 
     let mut send_task = tokio::spawn(async move {
         let empty = Vec::<String>::new();
@@ -69,8 +89,8 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
                 SendTo::Spectators(s) => {
                     send_or_break!(&mut sender, msg, s, &username);
                 }
-                SendTo::Players(p) => {
-                    send_or_break!(&mut sender, msg, p, &username);
+                SendTo::Players(players) => {
+                    send_or_break!(&mut sender, msg, players, &username);
                 }
                 SendTo::SpectatorsAndPlayers(sp) => {
                     if sp.1.contains(&msg.username) {
@@ -86,7 +106,7 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
     let tx = ws.tx.clone();
 
     let mut recv_task = tokio::spawn(async move {
-        let handler = MessageHandler::new(&user, &ws, &tx, &db);
+        let handler = MessageHandler::new(&user, &ws, &tx, &db, &db_tx);
         handler.connecting(true);
         while let Some(Ok(msg)) = receiver.next().await {
             match msg {
@@ -131,7 +151,7 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
                                     }
                                 } else if t == "live_game_start" {
                                     if let Ok(g) = serde_json::from_str::<GameGet>(&text) {
-                                        handler.get_game(&g.game_id).await;
+                                        handler.get_game(&g.game_id, &user.username).await;
                                     }
                                 } else if t == "live_game_buy" || t == "live_game_confirm" {
                                     if let Ok(g) = serde_json::from_str::<GameGet>(&text) {
@@ -145,6 +165,23 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
                                     if let Ok(g) = serde_json::from_str::<GameGet>(&text) {
                                         handler.fight_move(g).await;
                                     }
+                                } else if t == "live_game_draw" {
+                                    if let Ok(g) = serde_json::from_str::<GameGet>(&text) {
+                                        handler.draw_req(&g.game_id, &user.username).await;
+                                    }
+                                } else if t == "live_game_resign" {
+                                    if let Ok(g) = serde_json::from_str::<GameGet>(&text) {
+                                        handler.resign(&g.game_id, &user.username).await;
+                                    }
+                                } else if t == "live_game_sfen" {
+                                    if let Ok(json) = serde_json::from_str::<GameGet>(&text) {
+                                        handler.get_sfen(&json);
+                                    }
+                                } else if t == "live_tv" {
+                                    handler.get_tv();
+                                }
+                                else {
+                                    println!("{:?}", &text);
                                 }
                             }
                             _ => println!("{}", &text),
@@ -161,7 +198,7 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
     });
 
     tokio::select! {
-        _ = (&mut send_task) => recv_task.abort(),
-        _ = (&mut recv_task) => send_task.abort()
+        _ = (&mut send_task) => {recv_task.abort(); db_send_task.abort()},
+        _ = (&mut recv_task) => {send_task.abort(); db_send_task.abort()}
     }
 }
