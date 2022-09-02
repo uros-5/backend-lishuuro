@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use futures::TryStreamExt;
 use mongodb::{options::FindOptions, Collection};
 use serde_json::Value;
@@ -114,4 +116,19 @@ pub async fn get_article(db: &Collection<Article>, id: &String) -> Option<Articl
         }
     }
     None
+}
+
+/// get all unfinished matches
+pub async fn unfinished(db: &Collection<ShuuroGame>) -> HashMap<String, ShuuroGame> {
+    let db = db.clone();
+    let filter = doc! {"status" : {"$lt": &0}};
+    let mut hm = HashMap::new();
+    let c = db.find(filter, None);
+    if let Ok(c) = c.await {
+        let games: Vec<ShuuroGame> = c.try_collect().await.unwrap_or_else(|_| vec![]);
+        for g in games {
+            hm.insert(String::from(&g._id), g);
+        }
+    }
+    return hm;
 }

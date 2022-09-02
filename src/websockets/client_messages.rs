@@ -1,4 +1,7 @@
+use mongodb::Collection;
 use serde::{Deserialize, Serialize};
+
+use crate::database::mongo::ShuuroGame;
 
 use super::MessageHandler;
 

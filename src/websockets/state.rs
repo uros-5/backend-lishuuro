@@ -1,8 +1,11 @@
+use crate::database::{mongo::ShuuroGame, queries::unfinished};
+
 use super::{
     rooms::{ChatRooms, Players},
     ClientMessage, GameReqs, ShuuroGames,
 };
-use tokio::sync::broadcast;
+use mongodb::Collection;
+use tokio::sync::broadcast::{self};
 
 pub struct WsState {
     pub players: Players,
@@ -25,5 +28,12 @@ impl Default for WsState {
             tx,
             shuuro_games: ShuuroGames::default(),
         }
+    }
+}
+
+impl WsState {
+    pub async fn load_unfinished(&self, db: &Collection<ShuuroGame>) {
+        let unfinished = unfinished(db).await;
+        self.shuuro_games.load_unfinished(unfinished);
     }
 }

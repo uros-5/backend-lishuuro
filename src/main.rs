@@ -1,4 +1,5 @@
 use axum::{http::HeaderValue, routing::get, Extension, Router};
+
 use std::{
     net::SocketAddr,
     sync::{Arc, Mutex},
@@ -12,7 +13,7 @@ mod routes;
 mod websockets;
 
 use lichess::{curr_url, MyKey};
-use routes::{callback, login, vue_user, article, get_games};
+use routes::{article, callback, get_games, login, vue_user};
 
 use crate::{
     database::Database,
@@ -25,7 +26,9 @@ async fn main() {
     let db = Database::new().await;
     let cors_layer = cors(&db.key);
     let db = Arc::new(db);
+    let games = db.mongo.games.clone();
     let ws = Arc::new(WsState::default());
+    ws.load_unfinished(&db.mongo.games).await;
     let app = Router::new()
         .route("/login", get(login))
         .route("/callback", get(callback))

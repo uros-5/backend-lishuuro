@@ -30,6 +30,7 @@ hyper = "0.14"
 json_value_merge = "1.1.2"
 chrono = "0.4.19"
 shuuro = {git = "ssh://git@github.com/uros-5/shuuro.git" }
+ctrlc = "3.2.3"
 
 [dependencies.mongodb]
 version = "2.2.2"

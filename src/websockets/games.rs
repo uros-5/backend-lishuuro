@@ -54,6 +54,11 @@ impl ShuuroGames {
         self.all.lock().unwrap().len()
     }
 
+    /// Load games from db
+    pub fn load_unfinished(&self, hm: HashMap<String, ShuuroGame>) {
+        *self.all.lock().unwrap() = hm;
+    }
+
     // SHOP PART
 
     /// Get hand for active player.
@@ -448,6 +453,10 @@ impl ShuuroGames {
             games.push(tv);
         }
         games
+    }
+
+    pub async fn save_on_exit(&self, db: &Collection<ShuuroGame>) {
+        for game in self.all.lock().unwrap().iter() {}
     }
 }
 
