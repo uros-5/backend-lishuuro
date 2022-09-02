@@ -193,8 +193,10 @@ impl<'a> MessageHandler<'a> {
         {
             let res =
                 serde_json::json!({"t": "live_game_start", "game_id": id, "game_info": &game});
-            self.ws.players.add_spectator(id, username);
-            self.user.watch(id);
+            if !&game.players.contains(&username) {
+                self.ws.players.add_spectator(id, username);
+                self.user.watch(id);
+            }
             self.send_msg(res, SendTo::Me);
             return Some(String::from(id));
         }
@@ -236,10 +238,7 @@ impl<'a> MessageHandler<'a> {
                     "first_move_error": fme,
                     "clocks": clocks
                 });
-                self.send_msg(
-                    res.clone(),
-                    SendTo::Spectators(self.ws.players.get_spectators("tv").unwrap()),
-                );
+                self.send_tv_msg(res.clone());
                 if let Some(s) = self.ws.players.get_spectators(&json.game_id) {
                     self.send_msg(res, SendTo::SpectatorsAndPlayers((s, p)));
                 }
@@ -250,7 +249,6 @@ impl<'a> MessageHandler<'a> {
     pub async fn fight_move(&self, json: GameGet) {
         if let Some(m) = self.ws.shuuro_games.fight_move(&json, &self.user.username) {
             if let LiveGameMove::FightMove(m, clocks, status, _result, players, o) = m {
-                let tv = self.ws.players.get_spectators("tv").unwrap();
                 let res = serde_json::json!({
                     "t": "live_game_play",
                     "game_move": m,
@@ -269,14 +267,14 @@ impl<'a> MessageHandler<'a> {
                     self.ws.players.remove_spectators(&json.game_id);
                     let res_end =
                         serde_json::json!({"t": "live_game_end", "game_id": &json.game_id});
-                    self.send_msg(res_end, SendTo::Spectators(tv.clone()));
+                    self.send_tv_msg(res_end);
                 }
                 if let Some(s) = self.ws.players.get_spectators(&json.game_id) {
                     self.send_msg(res, SendTo::SpectatorsAndPlayers((s, players)));
                 } else {
                     self.send_msg(res, SendTo::Players(players));
                 }
-                self.send_msg(tv_res, SendTo::Spectators(tv));
+                self.send_tv_msg(tv_res);
             }
         }
     }
@@ -284,8 +282,7 @@ impl<'a> MessageHandler<'a> {
     fn set_deploy(&self, json: &GameGet, confirmed: [bool; 2]) {
         if !confirmed.contains(&false) {
             if let Some(res) = self.ws.shuuro_games.set_deploy(&json.game_id) {
-                let tv = self.ws.players.get_spectators("tv").unwrap();
-                self.send_msg(res.clone(), SendTo::Spectators(tv));
+                self.send_tv_msg(res.clone());
                 let s = self.ws.players.get_spectators(&json.game_id).unwrap();
                 let p = self.ws.shuuro_games.get_players(&json.game_id).unwrap();
                 self.send_msg(res, SendTo::SpectatorsAndPlayers((s, p)));
@@ -338,6 +335,12 @@ impl<'a> MessageHandler<'a> {
         let _ = self.tx.send(cm);
     }
 
+    pub fn send_tv_msg(&self, message: Value) {
+        let tv = self.ws.players.get_spectators("tv").unwrap();
+        let message = serde_json::json!({"t": "tv_game_update", "g": message});
+        self.send_msg(message, SendTo::Spectators(tv));
+    }
+
     async fn create_game(&self, game: GameRequest) -> ShuuroGame {
         let colors = game.colors(&self.user.username);
         let id = game_exist(&self.db.mongo.games).await;
@@ -359,6 +362,7 @@ impl<'a> MessageHandler<'a> {
 
             if draw.0 == 5 {
                 let res = serde_json::json!({"t": "live_game_draw", "draw": d, "game_id": &id});
+                self.send_tv_msg(res.clone());
                 if let Some(s) = self.ws.players.get_spectators(id) {
                     self.send_msg(res, SendTo::SpectatorsAndPlayers((s, draw.1)));
                 } else {
@@ -388,6 +392,7 @@ impl<'a> MessageHandler<'a> {
                 "player": username,
                 "game_id": id
             });
+            self.send_tv_msg(res.clone());
             if let Some(s) = self.ws.players.get_spectators(id) {
                 self.send_msg(res, SendTo::SpectatorsAndPlayers((s, players)));
             } else {
@@ -405,7 +410,7 @@ impl<'a> MessageHandler<'a> {
         self.remove_spectator(&self.user.watches.lock().unwrap());
         self.add_spectator(&String::from("tv"));
         let all = self.ws.shuuro_games.get_tv();
-        let res = serde_json::json!({"t": "live_game_tv", "games": all});
+        let res = serde_json::json!({"t": "live_tv", "games": all});
         self.send_msg(res, SendTo::Me);
     }
 

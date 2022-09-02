@@ -1,11 +1,16 @@
 use std::{collections::HashMap, sync::Arc};
 
-use axum::{extract::Query, response::Redirect, Extension, Json};
+use axum::{
+    extract::{Path, Query},
+    response::Redirect,
+    Extension, Json,
+};
 use hyper::HeaderMap;
+use serde_json::Value;
 
 use crate::{
     database::{
-        queries::player_exist,
+        queries::{get_article, get_player_games, player_exist},
         redis::{UserSession, VueUser},
         Database,
     },
@@ -52,4 +57,24 @@ pub async fn callback(
 pub async fn vue_user(user: UserSession) -> (HeaderMap, Json<VueUser>) {
     let headers = user.headers();
     (headers, Json(VueUser::from(&user)))
+}
+
+pub async fn get_games(
+    Path(username): Path<String>,
+    Extension(db): Extension<Arc<Database>>,
+) -> Json<Value> {
+    if let Some(games) = get_player_games(&db.mongo.games, &username).await {
+        return Json(serde_json::json!({"exist": true, "games": games}));
+    }
+    Json(serde_json::json!({"exist": false}))
+}
+
+pub async fn article(
+    Path(id): Path<String>,
+    Extension(db): Extension<Arc<Database>>,
+) -> Json<Value> {
+    if let Some(article) = get_article(&db.mongo.articles, &id).await {
+        return Json(serde_json::json!({"exist": true, "news": article}));
+    }
+    Json(serde_json::json!({"exist": false}))
 }

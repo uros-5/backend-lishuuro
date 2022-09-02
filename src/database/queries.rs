@@ -1,10 +1,11 @@
-use mongodb::Collection;
+use futures::TryStreamExt;
+use mongodb::{options::FindOptions, Collection};
 use serde_json::Value;
 
 use crate::lichess::login::{random_game_id, random_username};
 
 use super::{
-    mongo::{Player, ShuuroGame},
+    mongo::{Article, Player, ShuuroGame},
     redis::UserSession,
 };
 
@@ -85,4 +86,32 @@ pub async fn update_entire_game(db: &Collection<ShuuroGame>, game: &ShuuroGame) 
     let query = doc! {"_id": &game._id};
     let update = doc! {"$set": bson::to_bson(&game).unwrap()};
     db.update_one(query, update, None).await.ok();
+}
+
+pub async fn get_player_games(
+    db: &Collection<ShuuroGame>,
+    username: &String,
+) -> Option<Vec<ShuuroGame>> {
+    let options = FindOptions::builder()
+        .sort(doc! {"$natural": -1})
+        .limit(Some(5))
+        .build();
+    let filter = doc! {"players": {"$in": [username]}};
+    let q = db.find(filter, options).await;
+    if let Ok(res) = q {
+        let games: Vec<ShuuroGame> = res.try_collect().await.unwrap_or_else(|_| vec![]);
+        println!("okkk");
+        return Some(games);
+    }
+    None
+}
+
+pub async fn get_article(db: &Collection<Article>, id: &String) -> Option<Article> {
+    let filter = doc! {"title": id};
+    if let Ok(n) = db.find_one(filter, None).await {
+        if let Some(n) = n {
+            return Some(n);
+        }
+    }
+    None
 }

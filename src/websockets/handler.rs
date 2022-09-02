@@ -20,14 +20,8 @@ use crate::{
 
 use super::{ClientMessage, GameGet, GameRequest, MessageHandler, MsgDatabase, WsState};
 
-macro_rules! send_or_break {
-    ($sender: expr, $msg: expr, $arr: expr, $username: expr) => {
-        if $arr.len() != 0 {
-            if !$arr.contains($username) {
-                return ;
-            }
-        }
-
+macro_rules! send_or_break2 {
+    ($sender: expr, $msg: expr, $username: expr) => {
         if $sender
             .send(Message::Text($msg.msg.to_string()))
             .await
@@ -80,23 +74,27 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
             match &msg.to {
                 SendTo::Me => {
                     if &msg.username == &username {
-                        send_or_break!(&mut sender, msg, empty, &username);
+                        send_or_break2!(&mut sender, msg, &username);
                     }
                 }
                 SendTo::All => {
-                    send_or_break!(&mut sender, msg, empty, &username);
+                    send_or_break2!(&mut sender, msg, &username);
                 }
                 SendTo::Spectators(s) => {
-                    send_or_break!(&mut sender, msg, s, &username);
+                    if s.contains(&username) {
+                        send_or_break2!(&mut sender, msg, &username);
+                    }
                 }
                 SendTo::Players(players) => {
-                    send_or_break!(&mut sender, msg, players, &username);
+                    if players.contains(&username) {
+                        send_or_break2!(&mut sender, msg, &username);
+                    }
                 }
                 SendTo::SpectatorsAndPlayers(sp) => {
-                    if sp.1.contains(&msg.username) {
-                        send_or_break!(&mut sender, msg, empty, &username);
-                    } else if sp.0.contains(&msg.username) {
-                        send_or_break!(&mut sender, msg, empty, &username);
+                    if sp.1.contains(&username) {
+                        send_or_break2!(&mut sender, msg, &username);
+                    } else if sp.0.contains(&username) {
+                        send_or_break2!(&mut sender, msg, &username);
                     }
                 }
             }
@@ -179,8 +177,7 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
                                     }
                                 } else if t == "live_tv" {
                                     handler.get_tv();
-                                }
-                                else {
+                                } else {
                                     println!("{:?}", &text);
                                 }
                             }

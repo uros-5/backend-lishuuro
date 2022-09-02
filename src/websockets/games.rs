@@ -214,7 +214,6 @@ impl ShuuroGames {
                             ));
                         }
                     } else {
-                        
                     }
                 }
                 _ => (),

@@ -12,7 +12,7 @@ mod routes;
 mod websockets;
 
 use lichess::{curr_url, MyKey};
-use routes::{callback, login, vue_user};
+use routes::{callback, login, vue_user, article, get_games};
 
 use crate::{
     database::Database,
@@ -31,6 +31,8 @@ async fn main() {
         .route("/callback", get(callback))
         .route("/vue_user", get(vue_user))
         .route("/ws/", get(websocket_handler))
+        .route("/news/:id", get(article))
+        .route("/games/:username", get(get_games))
         .layer(Extension(db))
         .layer(Extension(ws))
         .layer(cors_layer);
