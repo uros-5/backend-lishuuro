@@ -56,7 +56,23 @@ impl ShuuroGames {
 
     /// Load games from db
     pub fn load_unfinished(&self, hm: HashMap<String, ShuuroGame>) {
-        *self.all.lock().unwrap() = hm;
+        let mut temp = HashMap::new();
+        for mut i in hm {
+            if i.1.current_stage == 0 {
+                let hands = format!("{:?}", &i.1.hands);
+                i.1.shuuro.0.set_hand(hands.as_str());
+                temp.insert(i.0, i.1);
+            } else if i.1.current_stage == 1 {
+                i.1.shuuro.1.set_sfen_history(i.1.history.1.clone());
+                i.1.shuuro.1.set_sfen(&i.1.sfen);
+                temp.insert(i.0, i.1);
+            } else if i.1.current_stage == 2 {
+                i.1.shuuro.2.set_sfen_history(i.1.history.1.clone());
+                i.1.shuuro.2.set_sfen(&i.1.sfen);
+                temp.insert(i.0, i.1);
+            }
+        }
+        *self.all.lock().unwrap() = temp;
     }
 
     // SHOP PART
@@ -456,7 +472,9 @@ impl ShuuroGames {
     }
 
     pub async fn save_on_exit(&self, db: &Collection<ShuuroGame>) {
-        for game in self.all.lock().unwrap().iter() {}
+        for game in self.all.lock().unwrap().iter() {
+            update_entire_game(db, &game.1).await;
+        }
     }
 }
 

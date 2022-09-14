@@ -178,6 +178,7 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
                                 } else if t == "live_tv" {
                                     handler.get_tv();
                                 } else if t == "save_all" {
+                                    handler.save_all(&user);
                                     // check if user is admiin
                                     // if it is then save all games and disallow creating new ones
                                     // when saving is done close the server
