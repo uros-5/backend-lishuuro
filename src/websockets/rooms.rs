@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::arc2;
+use crate::database::mongo::ShuuroGame;
 use crate::database::redis::UserSession;
 
 /// Struct containing active players and spectators
@@ -65,6 +66,12 @@ impl Players {
             .lock()
             .unwrap()
             .insert(String::from(id), HashSet::new());
+    }
+
+    pub fn add_spectators(&self, games: &HashMap<String, ShuuroGame>) {
+        for i in games.values() {
+            self.new_spectators(&i._id);
+        }
     }
 
     pub fn remove_spectators(&self, id: &String) {

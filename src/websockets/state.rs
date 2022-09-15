@@ -34,6 +34,7 @@ impl Default for WsState {
 impl WsState {
     pub async fn load_unfinished(&self, db: &Collection<ShuuroGame>) {
         let unfinished = unfinished(db).await;
+        self.players.add_spectators(&unfinished);
         self.shuuro_games.load_unfinished(unfinished);
     }
 }

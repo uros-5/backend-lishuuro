@@ -58,8 +58,9 @@ impl ShuuroGames {
     pub fn load_unfinished(&self, hm: HashMap<String, ShuuroGame>) {
         let mut temp = HashMap::new();
         for mut i in hm {
+            //self.ws.players.new_spectators(&i.0);
             if i.1.current_stage == 0 {
-                let hands = format!("{:?}", &i.1.hands);
+                let hands = format!("{}{}", &i.1.hands[0], &i.1.hands[1]);
                 i.1.shuuro.0.set_hand(hands.as_str());
                 temp.insert(i.0, i.1);
             } else if i.1.current_stage == 1 {
@@ -130,6 +131,7 @@ impl ShuuroGames {
                     if player_color == piece.color {
                         if let Some(confirmed) = game.shuuro.0.play(m) {
                             game.draws = [false, false];
+                            game.hands[p] = game.shuuro.0.to_sfen(player_color);
                             if confirmed[player_color as usize] == true {
                                 return Some(LiveGameMove::BuyMove(confirmed));
                             }
