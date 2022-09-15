@@ -26,7 +26,6 @@ async fn main() {
     let db = Database::new().await;
     let cors_layer = cors(&db.key);
     let db = Arc::new(db);
-    let games = db.mongo.games.clone();
     let ws = Arc::new(WsState::default());
     ws.load_unfinished(&db.mongo.games).await;
     let app = Router::new()

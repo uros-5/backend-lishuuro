@@ -1,14 +1,20 @@
-use std::{collections::HashSet, sync::{Arc, Mutex}};
+use std::{
+    collections::HashSet,
+    sync::{Arc, Mutex},
+};
 
 use serde_json::Value;
 use tokio::sync::broadcast::Sender;
 
-use crate::{database::{
-    mongo::ShuuroGame,
-    queries::{add_game_to_db, game_exist},
-    redis::UserSession,
-    Database,
-}, arc2};
+use crate::{
+    arc2,
+    database::{
+        mongo::ShuuroGame,
+        queries::{add_game_to_db, game_exist},
+        redis::UserSession,
+        Database,
+    },
+};
 
 use super::{rooms::ChatMsg, GameGet, GameRequest, LiveGameMove, MsgDatabase, WsState};
 
@@ -57,7 +63,7 @@ pub struct MessageHandler<'a> {
     pub tx: &'a Sender<ClientMessage>,
     pub db: &'a Arc<Database>,
     pub db_tx: &'a Sender<MsgDatabase>,
-    pub adding: Arc<Mutex<bool>>
+    pub adding: Arc<Mutex<bool>>,
 }
 
 impl<'a> MessageHandler<'a> {
@@ -74,7 +80,7 @@ impl<'a> MessageHandler<'a> {
             tx,
             db,
             db_tx,
-            adding: arc2(true) 
+            adding: arc2(true),
         }
     }
 
@@ -165,7 +171,7 @@ impl<'a> MessageHandler<'a> {
 
     pub async fn check_game_req(&self, game: GameRequest) {
         if !*self.adding.lock().unwrap() {
-            return ;
+            return;
         }
         if &game.username() == &self.user.username {
             self.remove_game_req(&game.username);
@@ -434,8 +440,11 @@ impl<'a> MessageHandler<'a> {
     pub async fn save_all(&self, user: &UserSession) {
         if user.username == "iiiurosiii" {
             *self.adding.lock().unwrap() = false;
-            self.ws.shuuro_games.save_on_exit(&self.db.mongo.games).await;
-            std::process::exit(1); 
+            self.ws
+                .shuuro_games
+                .save_on_exit(&self.db.mongo.games)
+                .await;
+            std::process::exit(1);
         }
     }
 }

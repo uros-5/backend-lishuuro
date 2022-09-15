@@ -1,9 +1,4 @@
-use mongodb::Collection;
 use serde::{Deserialize, Serialize};
-
-use crate::database::mongo::ShuuroGame;
-
-use super::MessageHandler;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct GameGet {

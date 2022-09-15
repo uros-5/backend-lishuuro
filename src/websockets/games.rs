@@ -64,11 +64,11 @@ impl ShuuroGames {
                 temp.insert(i.0, i.1);
             } else if i.1.current_stage == 1 {
                 i.1.shuuro.1.set_sfen_history(i.1.history.1.clone());
-                i.1.shuuro.1.set_sfen(&i.1.sfen);
+                let _ = i.1.shuuro.1.set_sfen(&i.1.sfen);
                 temp.insert(i.0, i.1);
             } else if i.1.current_stage == 2 {
-                i.1.shuuro.2.set_sfen_history(i.1.history.1.clone());
-                i.1.shuuro.2.set_sfen(&i.1.sfen);
+                i.1.shuuro.2.set_sfen_history(i.1.history.2.clone());
+                let _ = i.1.shuuro.2.set_sfen(&i.1.sfen);
                 temp.insert(i.0, i.1);
             }
         }
@@ -424,7 +424,7 @@ impl ShuuroGames {
         if let Some(g) = all.get(&id) {
             return Some(g.clone());
         }
-        s.db_tx.send(MsgDatabase::GetGame(String::from(id)));
+        let _ = s.db_tx.send(MsgDatabase::GetGame(String::from(id)));
 
         return None;
     }
@@ -472,8 +472,9 @@ impl ShuuroGames {
     }
 
     pub async fn save_on_exit(&self, db: &Collection<ShuuroGame>) {
-        for game in self.all.lock().unwrap().iter() {
-            update_entire_game(db, &game.1).await;
+        let all = self.all.lock().unwrap().clone();
+        for (_, game) in all {
+            update_entire_game(db, &game).await;
         }
     }
 }

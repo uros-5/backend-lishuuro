@@ -69,7 +69,6 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
     });
 
     let mut send_task = tokio::spawn(async move {
-        let empty = Vec::<String>::new();
         while let Ok(msg) = rx.recv().await {
             match &msg.to {
                 SendTo::Me => {
@@ -178,12 +177,11 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
                                 } else if t == "live_tv" {
                                     handler.get_tv();
                                 } else if t == "save_all" {
-                                    handler.save_all(&user);
+                                    handler.save_all(&user).await;
                                     // check if user is admiin
                                     // if it is then save all games and disallow creating new ones
                                     // when saving is done close the server
-                                }
-                                else {
+                                } else {
                                     println!("{:?}", &text);
                                 }
                             }
