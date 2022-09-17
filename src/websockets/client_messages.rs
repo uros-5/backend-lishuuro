@@ -1,4 +1,8 @@
+use std::sync::{Arc, Mutex};
+
 use serde::{Deserialize, Serialize};
+
+use super::time_control::TimeCheck;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct GameGet {
@@ -18,4 +22,5 @@ pub enum LiveGameMove {
 #[derive(Clone)]
 pub enum MsgDatabase {
     GetGame(String),
+    LostOnTime(Arc<Mutex<TimeCheck>>),
 }

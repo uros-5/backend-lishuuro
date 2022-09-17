@@ -16,7 +16,10 @@ use crate::{
     },
 };
 
-use super::{rooms::ChatMsg, GameGet, GameRequest, LiveGameMove, MsgDatabase, WsState};
+use super::{
+    rooms::ChatMsg, time_control::TimeCheck, GameGet, GameRequest, LiveGameMove, MsgDatabase,
+    WsState,
+};
 
 #[derive(Clone)]
 pub struct ClientMessage {
@@ -162,11 +165,86 @@ impl<'a> MessageHandler<'a> {
 
     async fn accept_game_req(&self, game: GameRequest) {
         let shuuro_game = self.create_game(game).await;
+        let id = String::from(&shuuro_game._id);
+        let id2 = String::from(&id);
         let msg = add_game_to_db(&self.db.mongo.games, &shuuro_game).await;
+        let db = self.db.mongo.games.clone();
         self.send_msg(msg, SendTo::Players(shuuro_game.players.clone()));
         self.ws.players.new_spectators(&shuuro_game._id);
         let _count = self.ws.shuuro_games.add_game(shuuro_game);
         self.shuuro_games_count(SendTo::All);
+
+        let db_tx = self.db_tx.clone();
+        let mut db_rv = self.db_tx.subscribe();
+        let ws2 = self.ws.clone();
+
+        let db_recv_task = tokio::spawn({
+            let session = self.user.clone();
+            let tx = self.ws.tx.clone();
+            let tv_spectators = self.ws.players.get_spectators("tv");
+            let match_spectators = self.ws.players.get_spectators(&id2);
+            async move {
+                while let Ok(msg) = db_rv.recv().await {
+                    match &msg {
+                        MsgDatabase::LostOnTime(b) => {
+                            ws2.shuuro_games.check_clocks(b);
+                            let time_check = b.lock().unwrap();
+                            if time_check.exist == false {
+                                break;
+                            } else if time_check.finished {
+                                drop(time_check);
+                                if let Some(values) = ws2.shuuro_games.clock_status(b) {
+                                    let cm = ClientMessage::new(
+                                        &session,
+                                        values.0.clone(),
+                                        SendTo::Players(values.2),
+                                    );
+                                    let _ = tx.send(cm);
+                                    if let Some(s) = match_spectators {
+                                        let cm = ClientMessage::new(
+                                            &session,
+                                            values.0,
+                                            SendTo::Spectators(s),
+                                        );
+                                        let _ = tx.send(cm);
+                                    }
+
+                                    let cm = ClientMessage::new(
+                                        &session,
+                                        values.1,
+                                        SendTo::Spectators(tv_spectators.unwrap()),
+                                    );
+                                    let _ = tx.send(cm);
+                                    let count = ws2.shuuro_games.game_count();
+                                    let msg = fmt_count("active_games", count);
+                                    let cm = ClientMessage::new(&session, msg, SendTo::All);
+                                    let _ = tx.send(cm);
+                                }
+                                tokio::spawn(async move {
+                                    ws2.shuuro_games.remove_game(&db.clone(), &id2).await;
+                                });
+                                break;
+                            }
+                        }
+                        _ => (),
+                    }
+                }
+            }
+        });
+
+        tokio::spawn(async move {
+            let a = arc2(TimeCheck::new(&id));
+            loop {
+                tokio::time::sleep(std::time::Duration::new(2, 0)).await;
+                let t = a.lock().unwrap();
+                if &t.finished == &true || &t.both_lost == &true || &t.exist == &false {
+                    //self2.lost_on_time(&id2, values);
+                    break;
+                }
+
+                if let Ok(r) = db_tx.send(MsgDatabase::LostOnTime(a.clone())) {}
+            }
+        });
     }
 
     pub async fn check_game_req(&self, game: GameRequest) {
@@ -179,6 +257,16 @@ impl<'a> MessageHandler<'a> {
             self.remove_game_req(&game.username);
             self.accept_game_req(game).await;
         }
+    }
+
+    pub fn lost_on_time(&self, id: &String, values: (Value, Value)) {
+        if let Some(players) = self.ws.shuuro_games.get_players(id) {
+            self.send_msg(values.0.clone(), SendTo::Players(players));
+            if let Some(spectators) = self.ws.players.get_spectators(id) {
+                self.send_msg(values.0, SendTo::Spectators(spectators));
+            }
+        }
+        self.send_tv_msg(values.1);
     }
 
     pub fn get_hand(&self, id: &String) {
@@ -229,9 +317,6 @@ impl<'a> MessageHandler<'a> {
                 LiveGameMove::BuyMove(confirmed) => {
                     self.confirm_shop(&json, &confirmed);
                     self.set_deploy(&json, confirmed);
-                }
-                LiveGameMove::LostOnTime(p) => {
-                    println!("{} lost", p);
                 }
                 _ => (),
             }

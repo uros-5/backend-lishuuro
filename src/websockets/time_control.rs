@@ -92,3 +92,41 @@ impl TimeControl {
         Duration::seconds(self.incr)
     }
 }
+
+#[derive(Debug)]
+pub struct TimeCheck {
+    pub finished: bool,
+    pub lost: usize,
+    pub both_lost: bool,
+    pub id: String,
+    pub exist: bool,
+}
+
+impl TimeCheck {
+    pub fn new(id: &str) -> Self {
+        Self {
+            finished: false,
+            lost: 0,
+            both_lost: false,
+            id: String::from(id),
+            exist: true,
+        }
+    }
+    pub fn finished(&mut self) {
+        self.finished = true;
+    }
+
+    pub fn both_lost(&mut self) {
+        self.both_lost = true;
+        self.finished();
+    }
+
+    pub fn lost(&mut self, index: usize) {
+        self.lost = index;
+        self.finished();
+    }
+
+    pub fn dont_exist(&mut self) {
+        self.exist = false;
+    }
+}

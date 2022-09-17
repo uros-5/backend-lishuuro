@@ -49,26 +49,12 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
 
     let (db_tx, mut db_rx) = broadcast::channel(100);
 
-    //let count = ws.players.add_player(&user.username);
     let username = String::from(&user.username);
     let db2 = db.clone();
     let tx2 = ws.tx.clone();
     let user2 = user.clone();
 
-    let db_send_task = tokio::spawn(async move {
-        while let Ok(msg) = db_rx.recv().await {
-            match &msg {
-                MsgDatabase::GetGame(id) => {
-                    if let Some(game) = get_game_db(&db2.mongo.games, id).await {
-                        let msg = serde_json::json!({"t": "live_game_start", "game_id": id, "game_info": &game});
-                        let _ = tx2.send(ClientMessage::new(&user2, msg, SendTo::Me));
-                    }
-                }
-            }
-        }
-    });
-
-    let mut send_task = tokio::spawn(async move {
+    let mut socket_send_task = tokio::spawn(async move {
         while let Ok(msg) = rx.recv().await {
             match &msg.to {
                 SendTo::Me => {
@@ -102,7 +88,7 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
 
     let tx = ws.tx.clone();
 
-    let mut recv_task = tokio::spawn(async move {
+    let mut socket_recv_task = tokio::spawn(async move {
         let handler = MessageHandler::new(&user, &ws, &tx, &db, &db_tx);
         handler.connecting(true);
         while let Some(Ok(msg)) = receiver.next().await {
@@ -178,14 +164,10 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
                                     handler.get_tv();
                                 } else if t == "save_all" {
                                     handler.save_all(&user).await;
-                                    // check if user is admiin
-                                    // if it is then save all games and disallow creating new ones
-                                    // when saving is done close the server
                                 } else {
-                                    println!("{:?}", &text);
                                 }
                             }
-                            _ => println!("{}", &text),
+                            _ => (),
                         }
                     }
                 }
@@ -198,8 +180,22 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
         }
     });
 
+    let db_send_task = tokio::spawn(async move {
+        while let Ok(msg) = db_rx.recv().await {
+            match &msg {
+                MsgDatabase::GetGame(id) => {
+                    if let Some(game) = get_game_db(&db2.mongo.games, id).await {
+                        let msg = serde_json::json!({"t": "live_game_start", "game_id": id, "game_info": &game});
+                        let _ = tx2.send(ClientMessage::new(&user2, msg, SendTo::Me));
+                    }
+                }
+                _ => (),
+            }
+        }
+    });
+
     tokio::select! {
-        _ = (&mut send_task) => {recv_task.abort(); db_send_task.abort()},
-        _ = (&mut recv_task) => {send_task.abort(); db_send_task.abort()}
+        _ = (&mut socket_send_task) => {socket_recv_task.abort(); db_send_task.abort()},
+        _ = (&mut socket_recv_task) => {socket_send_task.abort(); db_send_task.abort()}
     }
 }

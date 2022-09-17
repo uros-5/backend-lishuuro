@@ -102,7 +102,6 @@ pub async fn get_player_games(
     let q = db.find(filter, options).await;
     if let Ok(res) = q {
         let games: Vec<ShuuroGame> = res.try_collect().await.unwrap_or_else(|_| vec![]);
-        println!("okkk");
         return Some(games);
     }
     None

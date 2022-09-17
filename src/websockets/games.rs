@@ -15,7 +15,7 @@ use crate::{
     database::{mongo::ShuuroGame, queries::update_entire_game, redis::UserSession},
 };
 
-use super::{GameGet, LiveGameMove, MessageHandler, MsgDatabase};
+use super::{time_control::TimeCheck, GameGet, LiveGameMove, MessageHandler, MsgDatabase};
 
 pub struct ShuuroGames {
     all: Arc<Mutex<HashMap<String, ShuuroGame>>>,
@@ -355,6 +355,46 @@ impl ShuuroGames {
         outcome.to_string()
     }
 
+    pub fn clock_status(
+        &self,
+        time_check: &Arc<Mutex<TimeCheck>>,
+    ) -> Option<(Value, Value, [String; 2])> {
+        let time_check = time_check.lock().unwrap();
+        println!("unlocking done");
+        if let Some(g) = self
+            .all
+            .lock()
+            .unwrap()
+            .get_mut(&String::from(&time_check.id))
+        {
+            if time_check.both_lost {
+                g.status = 5;
+            } else {
+                g.status = 8;
+                g.result = {
+                    if time_check.lost == 0 {
+                        String::from("b")
+                    } else if time_check.lost == 1 {
+                        String::from("w")
+                    } else {
+                        String::from("")
+                    }
+                };
+            }
+            let res = serde_json::json!({
+            "t": "live_game_lot",
+            "game_id": &g._id,
+            "status": g.status,
+            "result": String::from(&g.result)});
+            let tv_res = serde_json::json!({"t": "live_game_end", "game_id": String::from(&g._id)});
+            let tv_res = serde_json::json!({"t": "tv_game_update", "g": tv_res});
+            return Some((res, tv_res, g.players.clone()));
+        }
+        println!("we go here");
+        drop(time_check);
+        None
+    }
+
     pub fn set_deploy(&self, id: &String) -> Option<Value> {
         if let Some(game) = self.all.lock().unwrap().get_mut(id) {
             game.current_stage = 1;
@@ -426,7 +466,7 @@ impl ShuuroGames {
         if let Some(g) = all.get(&id) {
             return Some(g.clone());
         }
-        let _ = s.db_tx.send(MsgDatabase::GetGame(String::from(id)));
+        let _ = s.db_tx.clone().send(MsgDatabase::GetGame(String::from(id)));
 
         return None;
     }
@@ -478,6 +518,28 @@ impl ShuuroGames {
         for (_, game) in all {
             update_entire_game(db, &game).await;
         }
+    }
+
+    pub fn check_clocks(&self, time_check: &Arc<Mutex<TimeCheck>>) {
+        let id = String::from(&time_check.lock().unwrap().id);
+        if let Some(game) = self.all.lock().unwrap().get(&id) {
+            drop(id);
+            if game.current_stage == 0 {
+                let durations = [game.tc.current_duration(0), game.tc.current_duration(1)];
+                if durations == [None, None] {
+                    time_check.lock().unwrap().both_lost();
+                } else if let Some(index) = durations.iter().position(|p| p == &None) {
+                    time_check.lock().unwrap().lost(index);
+                }
+            } else if game.current_stage != 0 {
+                let stm = game.side_to_move;
+                if let None = game.tc.current_duration(stm as usize) {
+                    time_check.lock().unwrap().lost(stm as usize);
+                }
+            }
+            return;
+        }
+        time_check.lock().unwrap().dont_exist();
     }
 }
 
