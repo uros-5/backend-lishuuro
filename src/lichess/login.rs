@@ -1,38 +1,12 @@
-use awc::Client;
+use reqwest::{Client, Url};
 
-use actix_session::Session;
+use super::{
+    curr_url,
+    login_helpers::{create_challenge, create_verifier},
+    LoginData, PostLoginToken, Token,
+};
 use base64::encode;
 use rand::Rng;
-use sha2::digest::generic_array::typenum::U32;
-use sha2::{digest::generic_array::GenericArray, Digest, Sha256};
-use url::Url;
-
-use crate::lichess::model::{LoginData, PostLoginToken, Token};
-
-use super::model::curr_url;
-
-fn sha256(buffer: String) -> GenericArray<u8, U32> {
-    let mut hasher = Sha256::new();
-    hasher.update(buffer.as_bytes());
-    let result = hasher.finalize();
-    result
-}
-
-pub fn base64_encode<T: AsRef<[u8]>>(s: T) -> String {
-    encode(s)
-        .replace("+", "-")
-        .replace("/", "_")
-        .replace("=", "")
-}
-
-pub fn create_verifier() -> String {
-    let random_bytes = rand::thread_rng().gen::<[u8; 32]>();
-    base64_encode(random_bytes)
-}
-
-pub fn create_challenge(verifier: &String) -> String {
-    base64_encode(sha256(verifier.clone()))
-}
 
 /// Start of login process.
 pub fn login_url(login_state: &String, prod: bool) -> (Url, String) {
@@ -46,13 +20,11 @@ pub fn login_url(login_state: &String, prod: bool) -> (Url, String) {
         ("state", login_state.as_str()),
         ("response_type", "code"),
         ("client_id", "lishuuro"),
-        (
-            "redirect_uri",
-            &r
-        ),
+        ("redirect_uri", &r),
         ("code_challenge", &challenge[..]),
         ("code_challenge_method", "S256"),
     ];
+
     for i in queries {
         final_url.query_pairs_mut().append_pair(i.0, i.1);
     }
@@ -71,21 +43,30 @@ pub fn random_username() -> String {
     )
 }
 
+/// Generate random game id.
+pub fn random_game_id() -> String {
+    format!(
+        "{}",
+        encode(rand::thread_rng().gen::<[u8; 10]>())
+            .replace("+", "")
+            .replace("/", "")
+            .replace("=", "")
+    )
+}
+
 /// Getting lichess token.
-pub async fn get_lichess_token(session: &Session, code: &str, prod: bool) -> Token {
+pub async fn get_lichess_token(code: &String, code_verifier: &String, prod: bool) -> Token {
     let url = "https://lichess.org/api/token";
-    let code_verifier = session.get::<String>("codeVerifier").ok().unwrap().unwrap();
-    let body = PostLoginToken::new(code_verifier, code);
+    let body = PostLoginToken::new(&code_verifier, code);
+    let body = body.to_json(prod);
     let client = Client::default();
-    let res = client.post(url).send_json(&body.to_json(prod)).await;
-    if let Ok(mut i) = res {
+    let req = client.post(url).json(&body).send();
+    if let Ok(i) = req.await {
         let json = i.json::<Token>().await;
 
         if let Ok(tok) = json {
             return tok;
         }
-    }
-    else {
     }
     return Token::default();
 }
@@ -99,7 +80,7 @@ pub async fn get_lichess_user(token: String) -> String {
         .header("Authorization", format!("Bearer {}", token))
         .send()
         .await;
-    if let Ok(mut i) = res {
+    if let Ok(i) = res {
         let json = i.json::<LoginData>().await;
         if let Ok(data) = json {
             return String::from(data.username);

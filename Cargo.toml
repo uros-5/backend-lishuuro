@@ -1,39 +1,38 @@
 [package]
-name = "server"
+name = "axum-example"
 version = "0.1.0"
 edition = "2021"
+
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+axum = { version = "0.5.13", features = ["ws","headers", "json"] }
+futures = "0.3.0"
+async-session = "3.0.0"
+tokio = { version = "1.0", features = ["full", "time"] }
+tower-http = { version = "0.3.0", features = ["cors", "util"] }
+tower = { version = "0.4", features = ["util"] }
+serde = { version = "1.0", features = ["derive"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }
+redis = { version = "0.21.5", features = ["aio", "connection-manager", "tokio-comp"] }
 sha2 = "0.10.1"
 hex-literal = "0.2.1"
 base64 = "0.13.0"
 rand = "0.8.4"
 url = "2.2.2"
-actix-web = { version = "3.3.3", features = ["openssl"] }
-actix-session = "0.4.1"
-futures = "0.3.19"
-tokio = { version = "0.2.25", features = ["full"] }
-bson = "2.1.0"
-redis = "0.21.5"
-futures-util = "0.3.17"
-mongodb = { version = "2.1.0", default-features = false, features = ["async-std-runtime"] }
-serde = { version = "1.0", features = ["derive"] }
-actix-redis = "0.9.2"
-actix-rt = "1.0"
+bson = { version = "2.1.0" }
 querystring = "1.1.0"
-serde_json = "1.0.78"
-openssl = "0.10.38"
-awc = "2.0.3"
-time = { version = "0.2", features = ["serde"] }
+serde_json = "1.0.81"
+reqwest = { version = "0.11.10", features = ["json"] }
+axum-macros = "0.2.2"
+hyper = "0.14"
 json_value_merge = "1.1.2"
-actix-cors = "0.5.4"
-shuuro = "0.5.93"
-actix-web-actors = "3"
-actix = "0.10.0"
-uuid = { version = "0.8", features = ["v4", "serde"] }
-itertools = "0.10"
-bitintr = "0.3"
-thiserror = "1.0"
-glicko2 = "0.3.1"
+chrono = "0.4.19"
+shuuro = {git = "ssh://git@github.com/uros-5/shuuro.git" }
+ctrlc = "3.2.3"
+
+[dependencies.mongodb]
+version = "2.2.2"
+default-features = false
+features = ["tokio-runtime"]

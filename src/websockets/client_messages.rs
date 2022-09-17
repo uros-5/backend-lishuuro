@@ -1,30 +1,26 @@
-// WEB SOCKETS MESSAGES
+use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct GameRequest {
-    pub t: String,
-    pub color: String,
-    pub game_id: String,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct GameMove {
-    pub t: String,
-    pub game_id: String,
-    pub game_move: String,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct GameGetHand {
-    pub t: String,
-    pub game_id: String,
-    pub color: String,
-}
+use super::time_control::TimeCheck;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct GameGet {
     pub t: String,
     pub game_id: String,
+    #[serde(default)]
+    pub game_move: String,
+}
+
+pub enum LiveGameMove {
+    BuyMove([bool; 2]),
+    LostOnTime(usize),
+    PlaceMove(String, [u64; 2], bool, bool, [String; 2]),
+    FightMove(String, [u64; 2], i32, String, [String; 2], String),
+}
+
+#[derive(Clone)]
+pub enum MsgDatabase {
+    GetGame(String),
+    LostOnTime(Arc<Mutex<TimeCheck>>),
 }
