@@ -83,6 +83,9 @@ impl TimeControl {
     }
 
     fn update_last_click(&mut self, color: usize, current: Duration) {
+        if self.incr == 0 && self.stage == 0 {
+            return ;
+        }
         let duration = current.checked_add(&self.incr()).unwrap();
         self.clocks[color] = duration;
         self.last_click = Utc::now().into();

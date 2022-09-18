@@ -360,7 +360,6 @@ impl ShuuroGames {
         time_check: &Arc<Mutex<TimeCheck>>,
     ) -> Option<(Value, Value, [String; 2])> {
         let time_check = time_check.lock().unwrap();
-        println!("unlocking done");
         if let Some(g) = self
             .all
             .lock()
@@ -373,9 +372,9 @@ impl ShuuroGames {
                 g.status = 8;
                 g.result = {
                     if time_check.lost == 0 {
-                        String::from("b")
-                    } else if time_check.lost == 1 {
                         String::from("w")
+                    } else if time_check.lost == 1 {
+                        String::from("b")
                     } else {
                         String::from("")
                     }
@@ -390,7 +389,6 @@ impl ShuuroGames {
             let tv_res = serde_json::json!({"t": "tv_game_update", "g": tv_res});
             return Some((res, tv_res, g.players.clone()));
         }
-        println!("we go here");
         drop(time_check);
         None
     }
@@ -448,10 +446,8 @@ impl ShuuroGames {
     }
 
     fn other_index(&self, color: Color) -> usize {
-        if color as usize == 0 {
-            return 1;
-        }
-        0
+        let b: bool = color as usize != 0;
+        usize::from(!b)
     }
 
     /// Get live or archived game(if it exist).
@@ -526,8 +522,13 @@ impl ShuuroGames {
             drop(id);
             if game.current_stage == 0 {
                 let durations = [game.tc.current_duration(0), game.tc.current_duration(1)];
+                let confirmed = self.confirmed(game);
                 if durations == [None, None] {
-                    time_check.lock().unwrap().both_lost();
+                    if &confirmed == &[false, false] {
+                        time_check.lock().unwrap().both_lost();
+                    } else if let Some(confirmed) = confirmed.iter().position(|i| i == &false) {
+                        time_check.lock().unwrap().lost(confirmed);
+                    }
                 } else if let Some(index) = durations.iter().position(|p| p == &None) {
                     time_check.lock().unwrap().lost(index);
                 }
@@ -541,6 +542,8 @@ impl ShuuroGames {
         }
         time_check.lock().unwrap().dont_exist();
     }
+
+    //pub fn is_draw(&self, )
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -562,4 +565,8 @@ impl TvGame {
             sfen: String::from(fen),
         }
     }
+}
+fn other_index(color: usize) -> usize {
+    let b: bool = color != 0;
+    usize::from(!b)
 }
