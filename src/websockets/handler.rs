@@ -18,7 +18,7 @@ use crate::{
     websockets::{rooms::ChatMsg, SendTo},
 };
 
-use super::{ClientMessage, GameGet, GameRequest, MessageHandler, MsgDatabase, WsState};
+use super::{ClientMessage, GameGet, GameRequest, MessageHandler, MsgDatabase, WsState, MsgSender};
 
 macro_rules! send_or_break2 {
     ($sender: expr, $msg: expr, $username: expr) => {
@@ -89,7 +89,8 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
     let tx = ws.tx.clone();
 
     let mut socket_recv_task = tokio::spawn(async move {
-        let handler = MessageHandler::new(&user, &ws, &tx, &db, &db_tx);
+        let msg_sender = MsgSender::new(&user, &tx);
+        let handler = MessageHandler::new(&user, &ws, &tx, &db, &db_tx, msg_sender);
         handler.connecting(true);
         while let Some(Ok(msg)) = receiver.next().await {
             match msg {
@@ -163,7 +164,7 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
                                 } else if t == "live_tv" {
                                     handler.get_tv();
                                 } else if t == "save_all" {
-                                    handler.save_all(&user).await;
+                                    handler.save_all().await;
                                 } else {
                                 }
                             }
