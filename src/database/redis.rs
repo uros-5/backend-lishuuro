@@ -59,7 +59,7 @@ impl UserSession {
     pub fn headers(&self) -> HeaderMap {
         let mut headers = HeaderMap::new();
         if self.is_new {
-            let cookie = format!("{}={}", AXUM_SESSION_COOKIE_NAME, &self.session);
+            let cookie = format!("{}={}; Path=/", AXUM_SESSION_COOKIE_NAME, &self.session);
             headers.insert(SET_COOKIE, HeaderValue::from_str(&cookie).unwrap());
         }
         headers
@@ -149,7 +149,7 @@ where
         let session_cookie = cookie
             .as_ref()
             .and_then(|cookie| cookie.get(AXUM_SESSION_COOKIE_NAME));
-        if !session_cookie.is_none() {
+        if session_cookie.is_none() == false {
             if let Some(session) = redis.get_session(session_cookie.unwrap()).await {
                 return Ok(session);
             }

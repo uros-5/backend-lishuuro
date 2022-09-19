@@ -39,7 +39,8 @@ pub async fn websocket_handler(
     Extension(live): Extension<Arc<WsState>>,
     user: UserSession,
 ) -> impl IntoResponse {
-    ws.on_upgrade(|socket| websocket(socket, db, live, user))
+    let headers = &user.headers();
+    (headers.clone(), ws.on_upgrade(|socket| websocket(socket, db, live, user)))
 }
 
 async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user: UserSession) {
