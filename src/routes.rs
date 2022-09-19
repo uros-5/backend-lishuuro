@@ -20,6 +20,7 @@ use crate::{
     },
 };
 
+/// Route for lichess login.
 pub async fn login(mut user: UserSession, Extension(db): Extension<Arc<Database>>) -> Redirect {
     let key = &db.key;
     let mut redis = db.redis.clone();
@@ -28,6 +29,8 @@ pub async fn login(mut user: UserSession, Extension(db): Extension<Arc<Database>
     redis.set_session(&user.session, user.clone()).await;
     Redirect::permanent(url.0.as_str())
 }
+
+/// Callback after successfull login.
 pub async fn callback(
     Query(params): Query<HashMap<String, String>>,
     Extension(db): Extension<Arc<Database>>,
@@ -54,11 +57,13 @@ pub async fn callback(
     Redirect::permanent(r.as_str())
 }
 
+/// Getting username for current session.
 pub async fn vue_user(user: UserSession) -> (HeaderMap, Json<VueUser>) {
     let headers = user.headers();
     (headers, Json(VueUser::from(&user)))
 }
 
+/// Get last 5 games for selected player.
 pub async fn get_games(
     Path(username): Path<String>,
     Extension(db): Extension<Arc<Database>>,
@@ -69,6 +74,7 @@ pub async fn get_games(
     Json(serde_json::json!({"exist": false}))
 }
 
+/// Get article.
 pub async fn article(
     Path(id): Path<String>,
     Extension(db): Extension<Arc<Database>>,

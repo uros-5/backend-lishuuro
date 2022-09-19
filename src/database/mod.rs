@@ -7,6 +7,7 @@ pub mod queries;
 pub mod redis;
 pub mod serde_helpers;
 
+/// Struct containing all databases.
 pub struct Database {
     pub redis: RedisCli,
     pub mongo: Mongo,
@@ -14,6 +15,7 @@ pub struct Database {
 }
 
 impl Database {
+    /// Create databases.
     pub async fn new() -> Self {
         let redis = RedisCli::default().await;
         let mongo = Mongo::new().await;

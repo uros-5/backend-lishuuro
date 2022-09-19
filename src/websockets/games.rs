@@ -196,6 +196,7 @@ impl ShuuroGames {
         None
     }
 
+    /// Get hands for both player.
     fn get_hands(&self, game: &ShuuroGame) -> [String; 2] {
         [
             game.shuuro.1.get_hand(Color::White),
@@ -278,6 +279,7 @@ impl ShuuroGames {
         None
     }
 
+    /// Returns LiveGameMove if move is legal.
     pub fn make_move(
         &self,
         json: &GameGet,
@@ -324,6 +326,7 @@ impl ShuuroGames {
         None
     }
 
+    /// After match is finished, update status.
     pub fn update_status(&self, game: &mut ShuuroGame) -> String {
         let outcome = game.shuuro.2.outcome();
         match outcome {
@@ -353,44 +356,6 @@ impl ShuuroGames {
             }
         }
         outcome.to_string()
-    }
-
-    pub fn clock_status(
-        &self,
-        time_check: &Arc<Mutex<TimeCheck>>,
-    ) -> Option<(Value, Value, [String; 2])> {
-        let time_check = time_check.lock().unwrap();
-        if let Some(g) = self
-            .all
-            .lock()
-            .unwrap()
-            .get_mut(&String::from(&time_check.id))
-        {
-            if time_check.both_lost {
-                g.status = 5;
-            } else {
-                g.status = 8;
-                g.result = {
-                    if time_check.lost == 0 {
-                        String::from("w")
-                    } else if time_check.lost == 1 {
-                        String::from("b")
-                    } else {
-                        String::from("")
-                    }
-                };
-            }
-            let res = serde_json::json!({
-            "t": "live_game_lot",
-            "game_id": &g._id,
-            "status": g.status,
-            "result": String::from(&g.result)});
-            let tv_res = serde_json::json!({"t": "live_game_end", "game_id": String::from(&g._id)});
-            let tv_res = serde_json::json!({"t": "tv_game_update", "g": tv_res});
-            return Some((res, tv_res, g.players.clone()));
-        }
-        drop(time_check);
-        None
     }
 
     pub fn set_deploy(&self, id: &String) -> Option<Value> {
@@ -441,81 +406,59 @@ impl ShuuroGames {
         None
     }
 
+    /// Returns index of player if it exist.
     fn player_index(&self, p: &[String; 2], u: &String) -> Option<usize> {
         p.iter().position(|x| x == u)
     }
 
+    /// Opposite index of specified.
     fn other_index(&self, color: Color) -> usize {
         let b: bool = color as usize != 0;
         usize::from(!b)
     }
 
-    /// Get live or archived game(if it exist).
-    pub async fn get_game<'a>(
+    /// CLOCK PART
+
+    /// After every 500ms, this function returns who lost on time.
+    pub fn clock_status(
         &self,
-        id: &String,
-        _db: &Collection<ShuuroGame>,
-        s: &'a MessageHandler<'a>,
-    ) -> Option<ShuuroGame> {
-        let id = String::from(id);
-        let all = self.all.lock().unwrap();
-        if let Some(g) = all.get(&id) {
-            return Some(g.clone());
+        time_check: &Arc<Mutex<TimeCheck>>,
+    ) -> Option<(Value, Value, [String; 2])> {
+        let time_check = time_check.lock().unwrap();
+        if let Some(g) = self
+            .all
+            .lock()
+            .unwrap()
+            .get_mut(&String::from(&time_check.id))
+        {
+            if time_check.both_lost {
+                g.status = 5;
+            } else {
+                g.status = 8;
+                g.result = {
+                    if time_check.lost == 0 {
+                        String::from("w")
+                    } else if time_check.lost == 1 {
+                        String::from("b")
+                    } else {
+                        String::from("")
+                    }
+                };
+            }
+            let res = serde_json::json!({
+            "t": "live_game_lot",
+            "game_id": &g._id,
+            "status": g.status,
+            "result": String::from(&g.result)});
+            let tv_res = serde_json::json!({"t": "live_game_end", "game_id": String::from(&g._id)});
+            let tv_res = serde_json::json!({"t": "tv_game_update", "g": tv_res});
+            return Some((res, tv_res, g.players.clone()));
         }
-        let _ = s.db_tx.clone().send(MsgDatabase::GetGame(String::from(id)));
-
-        return None;
-    }
-
-    pub fn live_sfen(&self, id: &String) -> Option<(u8, String)> {
-        if let Some(g) = self.all.lock().unwrap().get(id) {
-            return Some((g.current_stage, String::from(&g.sfen)));
-        }
+        drop(time_check);
         None
     }
 
-    pub fn resign(&self, id: &String, username: &String) -> Option<[String; 2]> {
-        if let Some(g) = self.all.lock().unwrap().get_mut(id) {
-            if let Some(index) = self.player_index(&g.players, &username) {
-                g.status = 7;
-                g.result = Color::from(index).to_string();
-                g.tc.click(index);
-                g.last_clock = DT::now();
-                return Some(g.players.clone());
-            }
-        }
-        None
-    }
-
-    pub fn get_tv(&self) -> Vec<TvGame> {
-        let c = 0;
-        let mut games = vec![];
-        let all = self.all.lock().unwrap();
-        for i in all.iter() {
-            if c == 20 {
-                break;
-            }
-            let f = &i.1.sfen;
-            if f == "" {
-                continue;
-            }
-            let id = &i.1._id;
-            let w = &i.1.players[0];
-            let b = &i.1.players[1];
-            let t = "live_tv";
-            let tv = TvGame::new(t, id, w, b, f);
-            games.push(tv);
-        }
-        games
-    }
-
-    pub async fn save_on_exit(&self, db: &Collection<ShuuroGame>) {
-        let all = self.all.lock().unwrap().clone();
-        for (_, game) in all {
-            update_entire_game(db, &game).await;
-        }
-    }
-
+    /// Check clocks for current stage.
     pub fn check_clocks(&self, time_check: &Arc<Mutex<TimeCheck>>) {
         let id = String::from(&time_check.lock().unwrap().id);
         if let Some(game) = self.all.lock().unwrap().get(&id) {
@@ -543,7 +486,75 @@ impl ShuuroGames {
         time_check.lock().unwrap().dont_exist();
     }
 
-    //pub fn is_draw(&self, )
+    /// Get live or archived game(if it exist).
+    pub async fn get_game<'a>(
+        &self,
+        id: &String,
+        _db: &Collection<ShuuroGame>,
+        s: &'a MessageHandler<'a>,
+    ) -> Option<ShuuroGame> {
+        let id = String::from(id);
+        let all = self.all.lock().unwrap();
+        if let Some(g) = all.get(&id) {
+            return Some(g.clone());
+        }
+        let _ = s.db_tx.clone().send(MsgDatabase::GetGame(String::from(id)));
+
+        return None;
+    }
+
+    /// Live sfen used for TV.
+    pub fn live_sfen(&self, id: &String) -> Option<(u8, String)> {
+        if let Some(g) = self.all.lock().unwrap().get(id) {
+            return Some((g.current_stage, String::from(&g.sfen)));
+        }
+        None
+    }
+
+    /// Resign if this player exist in game.
+    pub fn resign(&self, id: &String, username: &String) -> Option<[String; 2]> {
+        if let Some(g) = self.all.lock().unwrap().get_mut(id) {
+            if let Some(index) = self.player_index(&g.players, &username) {
+                g.status = 7;
+                g.result = Color::from(index).to_string();
+                g.tc.click(index);
+                g.last_clock = DT::now();
+                return Some(g.players.clone());
+            }
+        }
+        None
+    }
+
+    /// Get 20 matches for tv.
+    pub fn get_tv(&self) -> Vec<TvGame> {
+        let c = 0;
+        let mut games = vec![];
+        let all = self.all.lock().unwrap();
+        for i in all.iter() {
+            if c == 20 {
+                break;
+            }
+            let f = &i.1.sfen;
+            if f == "" {
+                continue;
+            }
+            let id = &i.1._id;
+            let w = &i.1.players[0];
+            let b = &i.1.players[1];
+            let t = "live_tv";
+            let tv = TvGame::new(t, id, w, b, f);
+            games.push(tv);
+        }
+        games
+    }
+
+    /// Before closing server save on exit.
+    pub async fn save_on_exit(&self, db: &Collection<ShuuroGame>) {
+        let all = self.all.lock().unwrap().clone();
+        for (_, game) in all {
+            update_entire_game(db, &game).await;
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -566,6 +577,7 @@ impl TvGame {
         }
     }
 }
+
 fn other_index(color: usize) -> usize {
     let b: bool = color != 0;
     usize::from(!b)

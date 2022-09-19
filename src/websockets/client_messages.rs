@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::time_control::TimeCheck;
 
+/// This struct is used for most game moves.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct GameGet {
     pub t: String,

@@ -7,6 +7,7 @@ use super::{
 use mongodb::Collection;
 use tokio::sync::broadcast::{self};
 
+/// This struct contains all data.
 pub struct WsState {
     pub players: Players,
     pub chat: ChatRooms,
@@ -32,6 +33,7 @@ impl Default for WsState {
 }
 
 impl WsState {
+    /// Load all games that are not finished.
     pub async fn load_unfinished(&self, db: &Collection<ShuuroGame>) {
         let unfinished = unfinished(db).await;
         self.players.add_spectators(&unfinished);

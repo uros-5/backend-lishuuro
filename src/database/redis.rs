@@ -18,6 +18,7 @@ use super::{mongo::Player, queries::create_player, Database};
 
 pub const AXUM_SESSION_COOKIE_NAME: &str = "axum_session";
 
+/// Struct representing current user.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserSession {
     pub username: String,
@@ -70,6 +71,7 @@ impl UserSession {
     }
 }
 
+/// Redis connection. Used only for saving session.
 #[derive(Clone)]
 pub struct RedisCli {
     con: ConnectionManager,
@@ -82,6 +84,7 @@ impl RedisCli {
         Self { con }
     }
 
+    /// Get session if it exist.
     pub async fn get_session(&mut self, key: &str) -> Option<UserSession> {
         if let Ok(s) = self.con.get::<String, String>(String::from(key)).await {
             if let Ok(mut value) = serde_json::from_str::<UserSession>(&s) {
@@ -93,6 +96,7 @@ impl RedisCli {
         None
     }
 
+    /// Set new session.
     pub async fn set_session(&mut self, key: &str, value: UserSession) {
         self.con
             .set::<String, String, String>(
@@ -107,6 +111,7 @@ impl RedisCli {
             .await;
     }
 
+    /// Create session.
     pub async fn new_session(&mut self, players: &Collection<Player>) -> UserSession {
         let username = create_player(players).await;
         loop {
@@ -120,6 +125,7 @@ impl RedisCli {
         }
     }
 
+    /// Returns one year ttl for registered user.
     pub fn ttl_days(&self, reg: bool) -> usize {
         let day = 60 * 60 * 24;
         if reg {
@@ -159,6 +165,7 @@ where
     }
 }
 
+/// After login, this struct is returned for updating username on frontend.
 #[derive(Debug, Clone, Serialize)]
 pub struct VueUser {
     pub username: String,

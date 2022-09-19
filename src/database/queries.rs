@@ -57,6 +57,7 @@ pub async fn player_exist(
     None
 }
 
+/// Check if game ID exist.
 pub async fn game_exist(db: &Collection<ShuuroGame>) -> String {
     loop {
         let id = random_game_id();
@@ -67,6 +68,7 @@ pub async fn game_exist(db: &Collection<ShuuroGame>) -> String {
     }
 }
 
+/// Get game from database if it exist.
 pub async fn get_game_db(db: &Collection<ShuuroGame>, id: &String) -> Option<ShuuroGame> {
     let db = db.clone();
     let id = String::from(id);
@@ -79,17 +81,20 @@ pub async fn get_game_db(db: &Collection<ShuuroGame>, id: &String) -> Option<Shu
     None
 }
 
+/// Add new game to database and format ws message.
 pub async fn add_game_to_db(db: &Collection<ShuuroGame>, game: &ShuuroGame) -> Value {
     if let Err(_res) = db.insert_one(game, None).await {}
     serde_json::json!({"t": "live_game_start", "game_id": &game._id, "game_info": &game})
 }
 
+/// Update all fields for game.
 pub async fn update_entire_game(db: &Collection<ShuuroGame>, game: &ShuuroGame) {
     let query = doc! {"_id": &game._id};
     let update = doc! {"$set": bson::to_bson(&game).unwrap()};
     db.update_one(query, update, None).await.ok();
 }
 
+/// Get last 5 games for player.
 pub async fn get_player_games(
     db: &Collection<ShuuroGame>,
     username: &String,
@@ -107,6 +112,7 @@ pub async fn get_player_games(
     None
 }
 
+/// Get article if ID exist.
 pub async fn get_article(db: &Collection<Article>, id: &String) -> Option<Article> {
     let filter = doc! {"title": id};
     if let Ok(n) = db.find_one(filter, None).await {

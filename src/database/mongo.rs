@@ -18,6 +18,7 @@ pub struct Mongo {
 }
 
 impl Mongo {
+    /// Create mongodb connection for all collections.
     pub async fn new() -> Self {
         let mut client_options = ClientOptions::parse("mongodb://127.0.0.1:27017")
             .await

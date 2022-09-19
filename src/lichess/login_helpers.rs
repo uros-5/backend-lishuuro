@@ -3,6 +3,8 @@ use rand::Rng;
 use sha2::digest::generic_array::typenum::U32;
 use sha2::{digest::generic_array::GenericArray, Digest, Sha256};
 
+// LOGIN HELPERS
+
 fn sha256(buffer: String) -> GenericArray<u8, U32> {
     let mut hasher = Sha256::new();
     hasher.update(buffer.as_bytes());

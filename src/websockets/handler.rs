@@ -20,7 +20,7 @@ use crate::{
 
 use super::{ClientMessage, GameGet, GameRequest, MessageHandler, MsgDatabase, WsState, MsgSender};
 
-macro_rules! send_or_break2 {
+macro_rules! send_or_break {
     ($sender: expr, $msg: expr, $username: expr) => {
         if $sender
             .send(Message::Text($msg.msg.to_string()))
@@ -32,6 +32,7 @@ macro_rules! send_or_break2 {
     };
 }
 
+/// Pass all app data to websocket handler.
 pub async fn websocket_handler(
     ws: WebSocketUpgrade,
     _user_agent: Option<TypedHeader<UserAgent>>,
@@ -43,6 +44,7 @@ pub async fn websocket_handler(
     (headers.clone(), ws.on_upgrade(|socket| websocket(socket, db, live, user)))
 }
 
+/// Handler for websocket messages.
 async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user: UserSession) {
     let (mut sender, mut receiver) = stream.split();
 
@@ -60,27 +62,27 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
             match &msg.to {
                 SendTo::Me => {
                     if &msg.username == &username {
-                        send_or_break2!(&mut sender, msg, &username);
+                        send_or_break!(&mut sender, msg, &username);
                     }
                 }
                 SendTo::All => {
-                    send_or_break2!(&mut sender, msg, &username);
+                    send_or_break!(&mut sender, msg, &username);
                 }
                 SendTo::Spectators(s) => {
                     if s.contains(&username) {
-                        send_or_break2!(&mut sender, msg, &username);
+                        send_or_break!(&mut sender, msg, &username);
                     }
                 }
                 SendTo::Players(players) => {
                     if players.contains(&username) {
-                        send_or_break2!(&mut sender, msg, &username);
+                        send_or_break!(&mut sender, msg, &username);
                     }
                 }
                 SendTo::SpectatorsAndPlayers(sp) => {
                     if sp.1.contains(&username) {
-                        send_or_break2!(&mut sender, msg, &username);
+                        send_or_break!(&mut sender, msg, &username);
                     } else if sp.0.contains(&username) {
-                        send_or_break2!(&mut sender, msg, &username);
+                        send_or_break!(&mut sender, msg, &username);
                     }
                 }
             }
