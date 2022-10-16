@@ -114,7 +114,7 @@ pub async fn get_player_games(
 
 /// Get article if ID exist.
 pub async fn get_article(db: &Collection<Article>, id: &String) -> Option<Article> {
-    let filter = doc! {"title": id};
+    let filter = doc! {"_id": id};
     if let Ok(n) = db.find_one(filter, None).await {
         if let Some(n) = n {
             return Some(n);
