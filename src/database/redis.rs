@@ -12,7 +12,7 @@ use redis::{aio::ConnectionManager, AsyncCommands, Client};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 
-use crate::arc2;
+use crate::{arc2, lichess::cookies};
 
 use super::{mongo::Player, queries::create_player, Database};
 
@@ -27,10 +27,19 @@ pub struct UserSession {
     pub session: String,
     pub is_new: bool,
     pub watches: Arc<Mutex<String>>,
+    #[serde(skip_serializing)]
+    #[serde(skip_deserializing)]
+    pub cookie_value: CookieValue,
 }
 
 impl UserSession {
-    pub fn new(username: &str, session: &str, reg: bool, code_verifier: &str) -> Self {
+    pub fn new(
+        username: &str,
+        session: &str,
+        reg: bool,
+        code_verifier: &str,
+        cookie_value: CookieValue,
+    ) -> Self {
         Self {
             username: String::from(username),
             reg,
@@ -38,6 +47,7 @@ impl UserSession {
             session: String::from(session),
             is_new: true,
             watches: arc2(String::from("")),
+            cookie_value,
         }
     }
 
@@ -60,7 +70,14 @@ impl UserSession {
     pub fn headers(&self) -> HeaderMap {
         let mut headers = HeaderMap::new();
         if self.is_new {
-            let cookie = format!("{}={}; Path=/", AXUM_SESSION_COOKIE_NAME, &self.session);
+            let max_age = 60*60*24*365;
+            let cookie = format!(
+                "{}={}; {} max-age={}; Path=/",
+                AXUM_SESSION_COOKIE_NAME,
+                &self.session,
+                &self.cookie_value.response(),
+                max_age
+            );
             headers.insert(SET_COOKIE, HeaderValue::from_str(&cookie).unwrap());
         }
         headers
@@ -68,6 +85,36 @@ impl UserSession {
 
     pub fn watch(&self, watching: &String) {
         *self.watches.lock().unwrap() = String::from(watching);
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct CookieValue {
+    pub same_site: String,
+    pub secure: String,
+    pub http_only: String,
+}
+
+impl CookieValue {
+    pub fn new(same_site: &str, secure: &str, http_only: &str) -> Self {
+        Self {
+            same_site: String::from(same_site),
+            secure: String::from(secure),
+            http_only: String::from(http_only),
+        }
+    }
+
+    pub fn response(&self) -> String {
+        if &self.same_site == "Lax" {
+            return format!("SameSite={};", &self.same_site);
+        }
+        format!("SameSite={}; Secure={}; HttpOnly={};", &self.same_site, &self.secure, &self.http_only)
+    }    
+}
+
+impl Default for CookieValue {
+    fn default() -> Self {
+        Self::new("", "", "")
     }
 }
 
@@ -112,13 +159,17 @@ impl RedisCli {
     }
 
     /// Create session.
-    pub async fn new_session(&mut self, players: &Collection<Player>) -> UserSession {
+    pub async fn new_session(
+        &mut self,
+        players: &Collection<Player>,
+        cookie_value: CookieValue,
+    ) -> UserSession {
         let username = create_player(players).await;
         loop {
             let s = Session::new();
             if let Some(_) = self.get_session(s.id()).await {
             } else {
-                let value = UserSession::new(&username, s.id(), false, "");
+                let value = UserSession::new(&username, s.id(), false, "", cookie_value);
                 self.set_session(s.id(), value.clone()).await;
                 return value;
             }
@@ -151,6 +202,8 @@ where
             .unwrap();
 
         let mut redis = db.redis.clone();
+        let prod = db.key.prod;
+        let cookie_value = cookies(prod);
 
         let session_cookie = cookie
             .as_ref()
@@ -160,7 +213,7 @@ where
                 return Ok(session);
             }
         }
-        let session = redis.new_session(&db.mongo.players).await;
+        let session = redis.new_session(&db.mongo.players, cookie_value).await;
         return Ok(session);
     }
 }

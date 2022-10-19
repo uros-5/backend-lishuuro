@@ -4,6 +4,8 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::database::redis::CookieValue;
+
 pub mod login;
 pub mod login_helpers;
 
@@ -61,7 +63,7 @@ impl Default for Token {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Clone, Deserialize)]
 pub struct MyKey {
     pub prod: bool,
     pub login_state: String,
@@ -82,6 +84,7 @@ impl Default for MyKey {
     }
 }
 
+
 /// My server url.
 pub fn curr_url(prod: bool) -> (&'static str, &'static str) {
     if prod {
@@ -89,4 +92,14 @@ pub fn curr_url(prod: bool) -> (&'static str, &'static str) {
     } else {
         ("http://localhost:8080", "http://localhost:3000")
     }
+}
+
+pub fn cookies(prod: bool) -> CookieValue {
+    if prod {
+        CookieValue::new("None", "true", "true")
+    }
+    else {
+        CookieValue::new("Lax", "/", "/")
+    }
+    
 }
