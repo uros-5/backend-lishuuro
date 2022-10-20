@@ -578,7 +578,7 @@ impl TvGame {
     }
 }
 
-fn other_index(color: usize) -> usize {
+fn _other_index(color: usize) -> usize {
     let b: bool = color != 0;
     usize::from(!b)
 }

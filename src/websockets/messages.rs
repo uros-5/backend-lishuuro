@@ -172,7 +172,7 @@ impl<'a> MessageHandler<'a> {
         let id2 = String::from(&id);
         let msg = add_game_to_db(&self.db.mongo.games, &shuuro_game).await;
         let db = self.db.mongo.games.clone();
-        let ws2 = self.ws.clone();
+        let _ws2 = self.ws.clone();
         self.msg_sender.send_msg(msg, SendTo::Players(shuuro_game.players.clone()));
         self.ws.players.new_spectators(&shuuro_game._id);
         let _count = self.ws.shuuro_games.add_game(shuuro_game);
@@ -182,7 +182,7 @@ impl<'a> MessageHandler<'a> {
         let mut db_rv = self.db_tx.subscribe();
         let ws2 = self.ws.clone();
 
-        let db_recv_task = tokio::spawn({
+        let _db_recv_task = tokio::spawn({
             
             let msg_sender = self.msg_sender.clone();
             async move {
@@ -230,7 +230,7 @@ impl<'a> MessageHandler<'a> {
                     break;
                 }
 
-                if let Ok(r) = db_tx.send(MsgDatabase::LostOnTime(a.clone())) {}
+                if let Ok(_) = db_tx.send(MsgDatabase::LostOnTime(a.clone())) {}
             }
         });
     }
@@ -247,7 +247,7 @@ impl<'a> MessageHandler<'a> {
         }
     }
 
-    pub fn lost_on_time(&self, id: &String, values: (Value, Value)) {
+    pub fn _lost_on_time(&self, id: &String, values: (Value, Value)) {
         if let Some(players) = self.ws.shuuro_games.get_players(id) {
             self.msg_sender.send_msg(values.0.clone(), SendTo::Players(players));
             if let Some(spectators) = self.ws.players.get_spectators(id) {
@@ -411,6 +411,9 @@ impl<'a> MessageHandler<'a> {
             let chat = self.ws.chat.get_chat(&String::from("home"));
             let value = fmt_chat(&String::from("home"), chat.unwrap());
             self.msg_sender.send_msg(value, SendTo::Me);
+        }
+        else {
+            self.msg_sender.send_msg(serde_json::json!({"con": "closed"}), SendTo::Me);
         }
     }
 

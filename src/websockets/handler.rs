@@ -18,7 +18,7 @@ use crate::{
     websockets::{rooms::ChatMsg, SendTo},
 };
 
-use super::{ClientMessage, GameGet, GameRequest, MessageHandler, MsgDatabase, WsState, MsgSender};
+use super::{ClientMessage, GameGet, GameRequest, MessageHandler, MsgDatabase, MsgSender, WsState};
 
 macro_rules! send_or_break {
     ($sender: expr, $msg: expr, $username: expr) => {
@@ -27,6 +27,7 @@ macro_rules! send_or_break {
             .await
             .is_err()
         {
+            let _ = $sender.close().await;
             break;
         }
     };
@@ -41,7 +42,10 @@ pub async fn websocket_handler(
     user: UserSession,
 ) -> impl IntoResponse {
     let headers = &user.headers();
-    (headers.clone(), ws.on_upgrade(|socket| websocket(socket, db, live, user)))
+    (
+        headers.clone(),
+        ws.on_upgrade(|socket| websocket(socket, db, live, user)),
+    )
 }
 
 /// Handler for websocket messages.
@@ -179,9 +183,10 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
                     handler.connecting(false);
                     break;
                 }
-                _ => (),
+                _ => handler.connecting(false),
             }
         }
+        handler.connecting(false);
     });
 
     let db_send_task = tokio::spawn(async move {
@@ -199,7 +204,13 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
     });
 
     tokio::select! {
-        _ = (&mut socket_send_task) => {socket_recv_task.abort(); db_send_task.abort()},
-        _ = (&mut socket_recv_task) => {socket_send_task.abort(); db_send_task.abort()}
+        _ = (&mut socket_send_task) => {
+            socket_recv_task.abort();
+            db_send_task.abort();
+        },
+        _ = (&mut socket_recv_task) => {
+            socket_send_task.abort();
+            db_send_task.abort();
+        }
     }
 }
