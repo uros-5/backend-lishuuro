@@ -94,7 +94,7 @@ impl Default for Players {
 pub struct ChatMsg {
     pub id: String,
     pub user: String,
-    pub time: String, 
+    pub time: String,
     pub message: String,
 }
 
@@ -112,7 +112,7 @@ impl ChatMsg {
     /// Formats date in format HH:MM
     pub fn update(&mut self, user: &String) {
         self.user = String::from(user);
-        self.time = chrono::offset::Local::now().to_rfc3339(); 
+        self.time = chrono::offset::Local::now().to_rfc3339();
     }
 
     /// Formats ChatMsg for json response.
@@ -193,5 +193,17 @@ impl ChatRooms {
             return Some(chat.clone());
         }
         None
+    }
+
+    pub fn add_chat(&self, id: &String) {
+        let mut chat = self.messages.lock().unwrap();
+        chat.insert(String::from(id), vec![]);
+        drop(chat);
+    }
+
+    pub fn remove_chat(&self, id: &String) {
+        let mut chat = self.messages.lock().unwrap();
+        chat.remove(&String::from(id));
+        drop(chat);
     }
 }

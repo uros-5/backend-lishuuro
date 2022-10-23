@@ -17,8 +17,9 @@ use crate::{
 };
 
 use super::{
-    rooms::{ChatMsg, Players}, time_control::TimeCheck, GameGet, GameRequest, LiveGameMove, MsgDatabase,
-    WsState,
+    rooms::{ChatMsg, Players},
+    time_control::TimeCheck,
+    GameGet, GameRequest, LiveGameMove, MsgDatabase, WsState,
 };
 
 #[derive(Clone)]
@@ -67,7 +68,7 @@ pub struct MessageHandler<'a> {
     pub db: &'a Arc<Database>,
     pub db_tx: &'a Sender<MsgDatabase>,
     pub adding: Arc<Mutex<bool>>,
-    pub msg_sender: MsgSender
+    pub msg_sender: MsgSender,
 }
 
 impl<'a> MessageHandler<'a> {
@@ -77,7 +78,7 @@ impl<'a> MessageHandler<'a> {
         tx: &'a Sender<ClientMessage>,
         db: &'a Arc<Database>,
         db_tx: &'a Sender<MsgDatabase>,
-        msg_sender: MsgSender
+        msg_sender: MsgSender,
     ) -> Self {
         Self {
             user,
@@ -86,7 +87,7 @@ impl<'a> MessageHandler<'a> {
             db,
             db_tx,
             adding: arc2(true),
-            msg_sender
+            msg_sender,
         }
     }
 
@@ -98,7 +99,11 @@ impl<'a> MessageHandler<'a> {
                 if &msg.id == "home" {
                     to = SendTo::Spectators(s);
                 } else {
-                    to = SendTo::SpectatorsAndPlayers((s, [String::from(""), String::from("")]));
+                    if let Some(players) = self.ws.shuuro_games.get_players(&id) {
+                        to = SendTo::SpectatorsAndPlayers((s, players));
+                    } else {
+                        to = SendTo::Spectators(s);
+                    }
                 }
                 self.msg_sender.send_msg(v, to);
             }
@@ -163,7 +168,8 @@ impl<'a> MessageHandler<'a> {
 
     pub fn shuuro_games_count(&self, to: SendTo) {
         let count = self.ws.shuuro_games.game_count();
-        self.msg_sender.send_msg(fmt_count("active_games", count), to);
+        self.msg_sender
+            .send_msg(fmt_count("active_games", count), to);
     }
 
     async fn accept_game_req(&self, game: GameRequest) {
@@ -173,19 +179,20 @@ impl<'a> MessageHandler<'a> {
         let variant = String::from(&shuuro_game.variant);
         let msg = add_game_to_db(&self.db.mongo.games, &shuuro_game).await;
         let db = self.db.mongo.games.clone();
-        let _ws2 = self.ws.clone();
-        self.msg_sender.send_msg(msg, SendTo::Players(shuuro_game.players.clone()));
+        let ws2 = self.ws.clone();
+        self.msg_sender
+            .send_msg(msg, SendTo::Players(shuuro_game.players.clone()));
         self.ws.players.new_spectators(&shuuro_game._id);
         let _count = self.ws.shuuro_games.add_game(shuuro_game);
         self.ws.shuuro_games.change_variant(&id2, &variant);
         self.shuuro_games_count(SendTo::All);
+        self.ws.chat.add_chat(&id);
 
         let db_tx = self.db_tx.clone();
         let mut db_rv = self.db_tx.subscribe();
         let ws2 = self.ws.clone();
 
         let _db_recv_task = tokio::spawn({
-            
             let msg_sender = self.msg_sender.clone();
             async move {
                 while let Ok(msg) = db_rv.recv().await {
@@ -200,18 +207,23 @@ impl<'a> MessageHandler<'a> {
                                 let match_spectators = ws2.players.get_spectators(&id2);
                                 drop(time_check);
                                 if let Some(values) = ws2.shuuro_games.clock_status(b) {
-                                    msg_sender.send_msg(values.0.clone(),SendTo::Players(values.2));
+                                    msg_sender
+                                        .send_msg(values.0.clone(), SendTo::Players(values.2));
                                     if let Some(s) = match_spectators {
                                         msg_sender.send_msg(values.0, SendTo::Spectators(s));
                                     }
-                                    msg_sender.send_msg(values.1,SendTo::Spectators(tv_spectators.unwrap()));
-                                    
+                                    msg_sender.send_msg(
+                                        values.1,
+                                        SendTo::Spectators(tv_spectators.unwrap()),
+                                    );
                                 }
+                                
                                 tokio::spawn(async move {
                                     ws2.shuuro_games.remove_game(&db.clone(), &id2).await;
                                     let count = ws2.shuuro_games.game_count();
                                     let msg = fmt_count("active_games", count);
-                                    msg_sender.send_msg(msg,SendTo::All);
+                                    msg_sender.send_msg(msg, SendTo::All);
+                                    ws2.chat.remove_chat(&id2);
                                 });
                                 break;
                             }
@@ -252,9 +264,11 @@ impl<'a> MessageHandler<'a> {
 
     pub fn _lost_on_time(&self, id: &String, values: (Value, Value)) {
         if let Some(players) = self.ws.shuuro_games.get_players(id) {
-            self.msg_sender.send_msg(values.0.clone(), SendTo::Players(players));
+            self.msg_sender
+                .send_msg(values.0.clone(), SendTo::Players(players));
             if let Some(spectators) = self.ws.players.get_spectators(id) {
-                self.msg_sender.send_msg(values.0, SendTo::Spectators(spectators));
+                self.msg_sender
+                    .send_msg(values.0, SendTo::Spectators(spectators));
             }
         }
         self.msg_sender.send_tv_msg(values.1, &self.ws.players);
@@ -297,7 +311,8 @@ impl<'a> MessageHandler<'a> {
         if let Some(s) = self.ws.players.get_spectators(&json.game_id) {
             if let Some(p) = self.ws.shuuro_games.get_players(&json.game_id) {
                 let res = serde_json::json!({"t": "pause_confirmed", "confirmed": confirmed});
-                self.msg_sender.send_msg(res, SendTo::SpectatorsAndPlayers((s, p)));
+                self.msg_sender
+                    .send_msg(res, SendTo::SpectatorsAndPlayers((s, p)));
             }
         }
     }
@@ -327,10 +342,14 @@ impl<'a> MessageHandler<'a> {
                 });
                 self.msg_sender.send_tv_msg(res.clone(), &self.ws.players);
                 if let Some(s) = self.ws.players.get_spectators(&json.game_id) {
-                    self.msg_sender.send_msg(res, SendTo::SpectatorsAndPlayers((s, p)));
+                    self.msg_sender
+                        .send_msg(res, SendTo::SpectatorsAndPlayers((s, p)));
                 }
                 if fme {
-                    self.ws.shuuro_games.remove_game(&self.db.mongo.games, &json.game_id).await;
+                    self.ws
+                        .shuuro_games
+                        .remove_game(&self.db.mongo.games, &json.game_id)
+                        .await;
                     self.shuuro_games_count(SendTo::All);
                     self.ws.players.remove_spectators(&json.game_id);
                 }
@@ -362,7 +381,8 @@ impl<'a> MessageHandler<'a> {
                     self.msg_sender.send_tv_msg(res_end, &self.ws.players);
                 }
                 if let Some(s) = self.ws.players.get_spectators(&json.game_id) {
-                    self.msg_sender.send_msg(res, SendTo::SpectatorsAndPlayers((s, players)));
+                    self.msg_sender
+                        .send_msg(res, SendTo::SpectatorsAndPlayers((s, players)));
                 } else {
                     self.msg_sender.send_msg(res, SendTo::Players(players));
                 }
@@ -377,7 +397,8 @@ impl<'a> MessageHandler<'a> {
                 self.msg_sender.send_tv_msg(res.clone(), &self.ws.players);
                 let s = self.ws.players.get_spectators(&json.game_id).unwrap();
                 let p = self.ws.shuuro_games.get_players(&json.game_id).unwrap();
-                self.msg_sender.send_msg(res, SendTo::SpectatorsAndPlayers((s, p)));
+                self.msg_sender
+                    .send_msg(res, SendTo::SpectatorsAndPlayers((s, p)));
             }
         }
     }
@@ -419,9 +440,9 @@ impl<'a> MessageHandler<'a> {
             let chat = self.ws.chat.get_chat(&String::from("home"));
             let value = fmt_chat(&String::from("home"), chat.unwrap());
             self.msg_sender.send_msg(value, SendTo::Me);
-        }
-        else {
-            self.msg_sender.send_msg(serde_json::json!({"con": "closed"}), SendTo::Me);
+        } else {
+            self.msg_sender
+                .send_msg(serde_json::json!({"con": "closed"}), SendTo::Me);
         }
     }
 
@@ -448,7 +469,8 @@ impl<'a> MessageHandler<'a> {
                 let res = serde_json::json!({"t": "live_game_draw", "draw": d, "game_id": &id});
                 self.msg_sender.send_tv_msg(res.clone(), &self.ws.players);
                 if let Some(s) = self.ws.players.get_spectators(id) {
-                    self.msg_sender.send_msg(res, SendTo::SpectatorsAndPlayers((s, draw.1)));
+                    self.msg_sender
+                        .send_msg(res, SendTo::SpectatorsAndPlayers((s, draw.1)));
                 } else {
                     self.msg_sender.send_msg(res, SendTo::Players(draw.1));
                 }
@@ -461,7 +483,8 @@ impl<'a> MessageHandler<'a> {
                 let res =
                     serde_json::json!({"t": "live_game_draw", "draw": d, "player": &username});
                 if let Some(s) = self.ws.players.get_spectators(id) {
-                    self.msg_sender.send_msg(res, SendTo::SpectatorsAndPlayers((s, draw.1)));
+                    self.msg_sender
+                        .send_msg(res, SendTo::SpectatorsAndPlayers((s, draw.1)));
                 } else {
                     self.msg_sender.send_msg(res, SendTo::Players(draw.1));
                 }
@@ -478,7 +501,8 @@ impl<'a> MessageHandler<'a> {
             });
             self.msg_sender.send_tv_msg(res.clone(), &self.ws.players);
             if let Some(s) = self.ws.players.get_spectators(id) {
-                self.msg_sender.send_msg(res, SendTo::SpectatorsAndPlayers((s, players)));
+                self.msg_sender
+                    .send_msg(res, SendTo::SpectatorsAndPlayers((s, players)));
             } else {
                 self.msg_sender.send_msg(res, SendTo::Players(players));
             }
@@ -530,9 +554,12 @@ pub struct MsgSender {
     tx: Sender<ClientMessage>,
 }
 
-impl MsgSender{
+impl MsgSender {
     pub fn new(user: &UserSession, tx: &Sender<ClientMessage>) -> Self {
-        Self { user: user.clone(), tx: tx.clone() }
+        Self {
+            user: user.clone(),
+            tx: tx.clone(),
+        }
     }
 
     pub fn send_msg(&self, value: Value, to: SendTo) {
@@ -546,5 +573,3 @@ impl MsgSender{
         self.send_msg(message, SendTo::Spectators(tv));
     }
 }
-
-        
