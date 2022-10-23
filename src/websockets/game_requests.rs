@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 
 use crate::arc2;
 
-pub const VARIANTS: [&str; 1] = ["shuuro12"];
+pub const VARIANTS: [&str; 2] = ["shuuro12", "shuuro12fairy"];
 pub const DURATION_RANGE: [i64; 28] = [
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 25, 30, 35, 40, 45, 60,
     75, 90,
@@ -18,7 +18,7 @@ pub const DURATION_RANGE: [i64; 28] = [
 #[derive(Clone, Serialize, Deserialize)]
 pub struct GameRequest {
     pub username: String,
-    variant: String,
+    pub variant: String,
     pub time: i64,
     pub incr: i64,
     color: String,

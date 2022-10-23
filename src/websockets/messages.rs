@@ -170,12 +170,14 @@ impl<'a> MessageHandler<'a> {
         let shuuro_game = self.create_game(game).await;
         let id = String::from(&shuuro_game._id);
         let id2 = String::from(&id);
+        let variant = String::from(&shuuro_game.variant);
         let msg = add_game_to_db(&self.db.mongo.games, &shuuro_game).await;
         let db = self.db.mongo.games.clone();
         let _ws2 = self.ws.clone();
         self.msg_sender.send_msg(msg, SendTo::Players(shuuro_game.players.clone()));
         self.ws.players.new_spectators(&shuuro_game._id);
         let _count = self.ws.shuuro_games.add_game(shuuro_game);
+        self.ws.shuuro_games.change_variant(&id2, &variant);
         self.shuuro_games_count(SendTo::All);
 
         let db_tx = self.db_tx.clone();
@@ -243,6 +245,7 @@ impl<'a> MessageHandler<'a> {
             self.remove_game_req(&game.username);
         } else {
             self.remove_game_req(&game.username);
+            self.remove_game_req(&self.user.username);
             self.accept_game_req(game).await;
         }
     }
@@ -311,7 +314,7 @@ impl<'a> MessageHandler<'a> {
         }
     }
 
-    pub fn place_move(&self, json: GameGet) {
+    pub async fn place_move(&self, json: GameGet) {
         if let Some(m) = self.ws.shuuro_games.place_move(&json, &self.user.username) {
             if let LiveGameMove::PlaceMove(mv, clocks, fme, tf, p) = m {
                 let res = serde_json::json!({
@@ -325,6 +328,11 @@ impl<'a> MessageHandler<'a> {
                 self.msg_sender.send_tv_msg(res.clone(), &self.ws.players);
                 if let Some(s) = self.ws.players.get_spectators(&json.game_id) {
                     self.msg_sender.send_msg(res, SendTo::SpectatorsAndPlayers((s, p)));
+                }
+                if fme {
+                    self.ws.shuuro_games.remove_game(&self.db.mongo.games, &json.game_id).await;
+                    self.shuuro_games_count(SendTo::All);
+                    self.ws.players.remove_spectators(&json.game_id);
                 }
             }
         }

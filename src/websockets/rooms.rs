@@ -1,4 +1,3 @@
-use chrono::{Timelike, Utc};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
@@ -95,16 +94,16 @@ impl Default for Players {
 pub struct ChatMsg {
     pub id: String,
     pub user: String,
-    pub time: String,
+    pub time: String, 
     pub message: String,
 }
 
 impl ChatMsg {
     /// Creating new message
-    fn _new(user: String, time: String, message: String, id: String) -> Self {
+    fn _new(user: String, message: String, id: String) -> Self {
         Self {
             user,
-            time,
+            time: bson::DateTime::now().to_string(),
             message,
             id,
         }
@@ -112,9 +111,8 @@ impl ChatMsg {
 
     /// Formats date in format HH:MM
     pub fn update(&mut self, user: &String) {
-        let now = Utc::now().time();
         self.user = String::from(user);
-        self.time = format!("{}:{}", now.hour(), now.minute());
+        self.time = chrono::offset::Local::now().to_rfc3339(); 
     }
 
     /// Formats ChatMsg for json response.

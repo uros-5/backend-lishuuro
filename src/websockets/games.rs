@@ -78,6 +78,18 @@ impl ShuuroGames {
 
     // SHOP PART
 
+    pub fn change_variant(&self, id: &String, variant: &String) {
+        let mut all = self.all.lock().unwrap();
+        if let Some(g) = all.get_mut(id) {
+            if variant == "shuuro12fairy" {
+                g.shuuro.0.change_variant();
+                g.shuuro.1.update_variant();
+                g.shuuro.2.update_variant();
+                drop(all); 
+            }
+        }
+    }
+
     /// Get hand for active player.
     pub fn get_hand(&self, id: &String, user: &UserSession) -> Option<String> {
         let all = self.all.lock().unwrap();
@@ -252,7 +264,10 @@ impl ShuuroGames {
         game.tc.update_stage(2);
         game.last_clock = DT::now();
         let sfen = game.shuuro.1.generate_sfen();
-        game.shuuro.2.set_sfen(&sfen.as_str()).ok();
+        let outcome = game.shuuro.2.set_sfen(&sfen.as_str());
+        if let Ok(_o) = outcome {
+            self.update_status(game);
+        }
         game.shuuro.2.in_check(game.shuuro.2.side_to_move().flip())
     }
 
