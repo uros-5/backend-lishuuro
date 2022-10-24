@@ -99,6 +99,7 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
         let msg_sender = MsgSender::new(&user, &tx);
         let handler = MessageHandler::new(&user, &ws, &tx, &db, &db_tx, msg_sender);
         handler.connecting(true);
+        handler.start_unfinished_clock().await;
         while let Some(Ok(msg)) = receiver.next().await {
             match msg {
                 Message::Text(text) => {

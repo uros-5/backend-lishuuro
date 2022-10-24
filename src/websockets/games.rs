@@ -19,6 +19,7 @@ use super::{time_control::TimeCheck, GameGet, LiveGameMove, MessageHandler, MsgD
 
 pub struct ShuuroGames {
     all: Arc<Mutex<HashMap<String, ShuuroGame>>>,
+    unfinished: Arc<Mutex<Vec<String>>>
 }
 
 impl Default for ShuuroGames {
@@ -26,6 +27,7 @@ impl Default for ShuuroGames {
         init();
         Self {
             all: arc2(HashMap::new()),
+            unfinished: arc2(vec![])
         }
     }
 }
@@ -57,8 +59,10 @@ impl ShuuroGames {
     /// Load games from db
     pub fn load_unfinished(&self, hm: HashMap<String, ShuuroGame>) {
         let mut temp = HashMap::new();
+        let mut v = vec![];
         for mut i in hm {
             //self.ws.players.new_spectators(&i.0);
+            v.push(String::from(&i.0));
             if i.1.current_stage == 0 {
                 let hands = format!("{}{}", &i.1.hands[0], &i.1.hands[1]);
                 i.1.shuuro.0.set_hand(hands.as_str());
@@ -74,6 +78,20 @@ impl ShuuroGames {
             }
         }
         *self.all.lock().unwrap() = temp;
+        *self.unfinished.lock().unwrap() = v;
+    }
+
+    pub fn get_unfinished(&self) -> Vec<String> {
+        let unfinished = self.unfinished.lock().unwrap();
+        let games = unfinished.clone();
+        drop(unfinished);
+        games
+    }
+
+    pub fn del_unfinished(&self) {
+        let mut unfinished = self.unfinished.lock().unwrap();
+        *unfinished = vec![];
+        drop(unfinished);
     }
 
     // SHOP PART

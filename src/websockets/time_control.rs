@@ -29,7 +29,7 @@ impl From<&ShuuroGame> for TimeControl {
     fn from(s: &ShuuroGame) -> Self {
         let last_click = DateTime::parse_from_str(&s.last_clock.to_string(), "%+").unwrap();
         Self {
-            last_click: last_click,
+            last_click,
             clocks: s.clocks.clone(),
             stage: s.current_stage,
             incr: s.incr.num_seconds(),

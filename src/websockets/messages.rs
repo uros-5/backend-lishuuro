@@ -4,7 +4,10 @@ use std::{
 };
 
 use serde_json::Value;
-use tokio::sync::broadcast::Sender;
+use tokio::{
+    sync::broadcast::{Sender},
+    task::JoinHandle,
+};
 
 use crate::{
     arc2,
@@ -178,8 +181,6 @@ impl<'a> MessageHandler<'a> {
         let id2 = String::from(&id);
         let variant = String::from(&shuuro_game.variant);
         let msg = add_game_to_db(&self.db.mongo.games, &shuuro_game).await;
-        let db = self.db.mongo.games.clone();
-        let ws2 = self.ws.clone();
         self.msg_sender
             .send_msg(msg, SendTo::Players(shuuro_game.players.clone()));
         self.ws.players.new_spectators(&shuuro_game._id);
@@ -187,12 +188,18 @@ impl<'a> MessageHandler<'a> {
         self.ws.shuuro_games.change_variant(&id2, &variant);
         self.shuuro_games_count(SendTo::All);
         self.ws.chat.add_chat(&id);
+        let _lost_on_time_task = self.lost_on_time_task(id2);
+        let _check_clock_task = self.check_clock_task(&id);
+    }
 
-        let db_tx = self.db_tx.clone();
+    pub fn lost_on_time_task(
+        &self,
+        id: String,
+    ) -> JoinHandle<()> {
         let mut db_rv = self.db_tx.subscribe();
         let ws2 = self.ws.clone();
-
-        let _db_recv_task = tokio::spawn({
+        let db = self.db.mongo.games.clone();
+        tokio::spawn({
             let msg_sender = self.msg_sender.clone();
             async move {
                 while let Ok(msg) = db_rv.recv().await {
@@ -204,7 +211,7 @@ impl<'a> MessageHandler<'a> {
                                 break;
                             } else if time_check.finished {
                                 let tv_spectators = ws2.players.get_spectators("tv");
-                                let match_spectators = ws2.players.get_spectators(&id2);
+                                let match_spectators = ws2.players.get_spectators(&id);
                                 drop(time_check);
                                 if let Some(values) = ws2.shuuro_games.clock_status(b) {
                                     msg_sender
@@ -217,13 +224,13 @@ impl<'a> MessageHandler<'a> {
                                         SendTo::Spectators(tv_spectators.unwrap()),
                                     );
                                 }
-                                
+
                                 tokio::spawn(async move {
-                                    ws2.shuuro_games.remove_game(&db.clone(), &id2).await;
+                                    ws2.shuuro_games.remove_game(&db.clone(), &id).await;
                                     let count = ws2.shuuro_games.game_count();
                                     let msg = fmt_count("active_games", count);
                                     msg_sender.send_msg(msg, SendTo::All);
-                                    ws2.chat.remove_chat(&id2);
+                                    ws2.chat.remove_chat(&id);
                                 });
                                 break;
                             }
@@ -232,8 +239,12 @@ impl<'a> MessageHandler<'a> {
                     }
                 }
             }
-        });
+        })
+    }
 
+    pub fn check_clock_task(&self, id: &String) -> JoinHandle<()> {
+        let id = String::from(id);
+        let db_tx = self.db_tx.clone();
         tokio::spawn(async move {
             let a = arc2(TimeCheck::new(&id));
             loop {
@@ -246,7 +257,7 @@ impl<'a> MessageHandler<'a> {
 
                 if let Ok(_) = db_tx.send(MsgDatabase::LostOnTime(a.clone())) {}
             }
-        });
+        })
     }
 
     pub async fn check_game_req(&self, game: GameRequest) {
@@ -542,6 +553,20 @@ impl<'a> MessageHandler<'a> {
                 .save_on_exit(&self.db.mongo.games)
                 .await;
             std::process::exit(1);
+        }
+    }
+
+    pub async fn start_unfinished_clock(&self) {
+        if self.user.username == "iiiurosiii" {
+            let unfinished = self.ws.shuuro_games.get_unfinished();
+            if unfinished.len() == 0 {
+                return ;
+            }
+            for id in unfinished {
+                let _lost_on_time = self.lost_on_time_task(String::from(&id));
+                let _check_clock = self.check_clock_task(&id);
+            }
+            self.ws.shuuro_games.del_unfinished();
         }
     }
 }
