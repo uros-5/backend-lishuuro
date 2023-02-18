@@ -30,7 +30,11 @@ impl Players {
         players.len()
     }
 
-    pub fn add_spectator(&self, id: &String, username: &String) -> Option<usize> {
+    pub fn add_spectator(
+        &self,
+        id: &String,
+        username: &String,
+    ) -> Option<usize> {
         let mut spectators = self.spectators.lock().unwrap();
         if let Some(s) = spectators.get_mut(id) {
             s.insert(String::from(username));
@@ -39,7 +43,11 @@ impl Players {
         None
     }
 
-    pub fn remove_spectator(&self, id: &String, username: &String) -> Option<usize> {
+    pub fn remove_spectator(
+        &self,
+        id: &String,
+        username: &String,
+    ) -> Option<usize> {
         let mut spectators = self.spectators.lock().unwrap();
         if let Some(s) = spectators.get_mut(id) {
             s.remove(username);
@@ -50,7 +58,8 @@ impl Players {
 
     /// Get spectators.
     pub fn get_spectators(&self, id: &str) -> Option<HashSet<String>> {
-        if let Some(s) = self.spectators.lock().unwrap().get(&String::from(id)) {
+        if let Some(s) = self.spectators.lock().unwrap().get(&String::from(id))
+        {
             return Some(s.clone());
         }
         None
@@ -173,7 +182,12 @@ impl ChatRooms {
     }
 
     /// Add new message.
-    pub fn add_msg(&self, id: &String, m: &mut ChatMsg, player: &UserSession) -> Option<Value> {
+    pub fn add_msg(
+        &self,
+        id: &String,
+        m: &mut ChatMsg,
+        player: &UserSession,
+    ) -> Option<Value> {
         if let Some(chat) = self.messages.lock().unwrap().get_mut(id) {
             if self.message_length(&m) {
                 if self.can_add(&chat, player) {

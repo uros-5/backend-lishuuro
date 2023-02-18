@@ -8,26 +8,39 @@ use chrono::Utc;
 use mongodb::Collection;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use shuuro::{init, position::Outcome, Color, Move, PieceType};
+use shuuro::{
+    attacks::Attacks,
+    position::Outcome,
+    position::{Board, Placement, Play, Sfen},
+    shuuro12::attacks12::Attacks12,
+    Color, Move, Piece, PieceType, Variant,
+};
+
+use shuuro::shuuro12::square12::Square12;
 
 use crate::{
     arc2,
-    database::{mongo::ShuuroGame, queries::update_entire_game, redis::UserSession},
+    database::{
+        mongo::ShuuroGame, queries::update_entire_game, redis::UserSession,
+    },
 };
 
-use super::{time_control::TimeCheck, GameGet, LiveGameMove, MessageHandler, MsgDatabase};
+use super::{
+    time_control::TimeCheck, GameGet, LiveGameMove, MessageHandler, MsgDatabase,
+};
 
 pub struct ShuuroGames {
     all: Arc<Mutex<HashMap<String, ShuuroGame>>>,
-    unfinished: Arc<Mutex<Vec<String>>>
+    unfinished: Arc<Mutex<Vec<String>>>,
 }
 
 impl Default for ShuuroGames {
+    /// Load games from db
     fn default() -> Self {
-        init();
+        Attacks12::init();
         Self {
             all: arc2(HashMap::new()),
-            unfinished: arc2(vec![])
+            unfinished: arc2(vec![]),
         }
     }
 }
@@ -100,10 +113,10 @@ impl ShuuroGames {
         let mut all = self.all.lock().unwrap();
         if let Some(g) = all.get_mut(id) {
             if variant == "shuuro12fairy" {
-                g.shuuro.0.change_variant();
-                g.shuuro.1.update_variant();
-                g.shuuro.2.update_variant();
-                drop(all); 
+                g.shuuro.0.change_variant(&String::from("shuuroFairy"));
+                g.shuuro.1.update_variant(Variant::ShuuroFairy);
+                g.shuuro.2.update_variant(Variant::ShuuroFairy);
+                drop(all);
             }
         }
     }
@@ -153,32 +166,43 @@ impl ShuuroGames {
     }
 
     /// Buy piece.
-    fn buy_piece(&self, json: &GameGet, game: &mut ShuuroGame, p: usize) -> Option<LiveGameMove> {
+    fn buy_piece(
+        &self,
+        json: &GameGet,
+        game: &mut ShuuroGame,
+        p: usize,
+    ) -> Option<LiveGameMove> {
         if let Some(m) = Move::from_sfen(&json.game_move) {
-            match m {
-                Move::Buy { piece } => {
-                    let player_color = Color::from(p);
-                    if player_color == piece.color {
-                        if let Some(confirmed) = game.shuuro.0.play(m) {
-                            game.draws = [false, false];
-                            game.hands[p] = game.shuuro.0.to_sfen(player_color);
-                            if confirmed[player_color as usize] == true {
-                                return Some(LiveGameMove::BuyMove(confirmed));
-                            }
-                        }
-                    } else {
-                    }
-                }
-                _ => (),
+            if let Move::Buy { piece } = m {
+                return self.new_piece(piece, game, p, m);
             }
         } else {
             // If move is wrong then confirm player choice.
             game.shuuro.0.confirm(Color::from(p));
-            return Some(LiveGameMove::BuyMove(self.confirmed(&game)));
+            return Some(LiveGameMove::BuyMove(self.confirmed(game)));
         }
         None
     }
 
+    fn new_piece(
+        &self,
+        piece: Piece,
+        game: &mut ShuuroGame,
+        player: usize,
+        m: Move<Square12>,
+    ) -> Option<LiveGameMove> {
+        let player_color = Color::from(player);
+        if player_color == piece.color {
+            if let Some(confirmed) = game.shuuro.0.play(m) {
+                game.draws = [false, false];
+                game.hands[player] = game.shuuro.0.to_sfen(player_color);
+                if confirmed[player_color as usize] {
+                    return Some(LiveGameMove::BuyMove(confirmed));
+                }
+            }
+        }
+        None
+    }
     /// Transfer hand from shop to deploy part.
     pub fn load_shop_hand(&self, game: &mut ShuuroGame) -> String {
         let w = game.shuuro.0.to_sfen(Color::White);
@@ -196,7 +220,8 @@ impl ShuuroGames {
         let mut completed: [bool; 3] = [false, false, false];
         let color_iter = Color::iter();
         for i in color_iter {
-            completed[i.index()] = g.shuuro.1.is_hand_empty(&i, PieceType::Plinth);
+            completed[i.index()] =
+                g.shuuro.1.is_hand_empty(i, PieceType::Plinth);
         }
         completed[2] = true;
         !completed.contains(&false)
@@ -205,7 +230,11 @@ impl ShuuroGames {
     // DEPLOY PART
 
     /// Place piece on board.
-    pub fn place_move(&self, json: &GameGet, player: &String) -> Option<LiveGameMove> {
+    pub fn place_move(
+        &self,
+        json: &GameGet,
+        player: &String,
+    ) -> Option<LiveGameMove> {
         let mut all = self.all.lock().unwrap();
         if let Some(game) = all.get_mut(&json.game_id) {
             if game.current_stage != 1 {
@@ -254,11 +283,12 @@ impl ShuuroGames {
                             if tf {
                                 fme = self.set_fight(game);
                             }
-                            game.side_to_move =
-                                self.other_index(game.shuuro.1.side_to_move()) as u8;
+                            game.side_to_move = self
+                                .other_index(game.shuuro.1.side_to_move())
+                                as u8;
                             game.sfen = game.shuuro.1.generate_sfen();
                             game.hands = self.get_hands(&game);
-                            game.history.1.push((s, 1));
+                            game.history.1.push(s);
                             return Some(LiveGameMove::PlaceMove(
                                 m,
                                 clocks,
@@ -290,7 +320,11 @@ impl ShuuroGames {
     }
 
     /// Make a move.
-    pub fn fight_move(&self, json: &GameGet, player: &String) -> Option<LiveGameMove> {
+    pub fn fight_move(
+        &self,
+        json: &GameGet,
+        player: &String,
+    ) -> Option<LiveGameMove> {
         let mut all = self.all.lock().unwrap();
         if let Some(game) = all.get_mut(&json.game_id) {
             if game.current_stage != 2 {
@@ -328,27 +362,36 @@ impl ShuuroGames {
                     promote: _,
                 } => {
                     if let Some(piece) = game.shuuro.2.piece_at(from) {
-                        if Color::from(index) == piece.color {
-                            if let Ok(_) = game
+                        if Color::from(index) == piece.color
+                            && game
                                 .shuuro
                                 .2
-                                .play(from.to_string().as_str(), to.to_string().as_str())
-                            {
-                                let outcome = self.update_status(game);
-                                let stm = self.other_index(game.shuuro.2.side_to_move());
-                                game.side_to_move = stm as u8;
-                                game.sfen = game.shuuro.2.generate_sfen();
-                                let m = game.shuuro.2.get_sfen_history().last().unwrap();
-                                game.history.2.push(m.clone());
-                                return Some(LiveGameMove::FightMove(
-                                    String::from(&json.game_move),
-                                    clocks,
-                                    game.status,
-                                    String::from(&game.result),
-                                    game.players.clone(),
-                                    outcome,
-                                ));
-                            }
+                                .play(
+                                    from.to_string().as_str(),
+                                    to.to_string().as_str(),
+                                )
+                                .is_ok()
+                        {
+                            let outcome = self.update_status(game);
+                            let stm =
+                                self.other_index(game.shuuro.2.side_to_move());
+                            game.side_to_move = stm as u8;
+                            game.sfen = game.shuuro.2.generate_sfen();
+                            let m = game
+                                .shuuro
+                                .2
+                                .get_sfen_history()
+                                .last()
+                                .unwrap();
+                            game.history.2.push(m.clone());
+                            return Some(LiveGameMove::FightMove(
+                                String::from(&json.game_move),
+                                clocks,
+                                game.status,
+                                String::from(&game.result),
+                                game.players.clone(),
+                                outcome,
+                            ));
                         }
                     } else {
                     }
@@ -415,7 +458,11 @@ impl ShuuroGames {
 
     /// DRAW PART
 
-    pub fn draw_req(&self, id: &String, username: &String) -> Option<(i8, [String; 2])> {
+    pub fn draw_req(
+        &self,
+        id: &String,
+        username: &String,
+    ) -> Option<(i8, [String; 2])> {
         if let Some(game) = self.all.lock().unwrap().get_mut(id) {
             if let Some(index) = self.player_index(&game.players, username) {
                 game.draws[index] = true;
@@ -484,7 +531,8 @@ impl ShuuroGames {
             "status": g.status,
             "result": String::from(&g.result)});
             let tv_res = serde_json::json!({"t": "live_game_end", "game_id": String::from(&g._id)});
-            let tv_res = serde_json::json!({"t": "tv_game_update", "g": tv_res});
+            let tv_res =
+                serde_json::json!({"t": "tv_game_update", "g": tv_res});
             return Some((res, tv_res, g.players.clone()));
         }
         drop(time_check);
@@ -497,15 +545,20 @@ impl ShuuroGames {
         if let Some(game) = self.all.lock().unwrap().get(&id) {
             drop(id);
             if game.current_stage == 0 {
-                let durations = [game.tc.current_duration(0), game.tc.current_duration(1)];
+                let durations =
+                    [game.tc.current_duration(0), game.tc.current_duration(1)];
                 let confirmed = self.confirmed(game);
                 if durations == [None, None] {
                     if &confirmed == &[false, false] {
                         time_check.lock().unwrap().both_lost();
-                    } else if let Some(confirmed) = confirmed.iter().position(|i| i == &false) {
+                    } else if let Some(confirmed) =
+                        confirmed.iter().position(|i| i == &false)
+                    {
                         time_check.lock().unwrap().lost(confirmed);
                     }
-                } else if let Some(index) = durations.iter().position(|p| p == &None) {
+                } else if let Some(index) =
+                    durations.iter().position(|p| p == &None)
+                {
                     time_check.lock().unwrap().lost(index);
                 }
             } else if game.current_stage != 0 {
@@ -545,7 +598,11 @@ impl ShuuroGames {
     }
 
     /// Resign if this player exist in game.
-    pub fn resign(&self, id: &String, username: &String) -> Option<[String; 2]> {
+    pub fn resign(
+        &self,
+        id: &String,
+        username: &String,
+    ) -> Option<[String; 2]> {
         if let Some(g) = self.all.lock().unwrap().get_mut(id) {
             if let Some(index) = self.player_index(&g.players, &username) {
                 g.status = 7;

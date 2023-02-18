@@ -69,7 +69,10 @@ pub async fn game_exist(db: &Collection<ShuuroGame>) -> String {
 }
 
 /// Get game from database if it exist.
-pub async fn get_game_db(db: &Collection<ShuuroGame>, id: &String) -> Option<ShuuroGame> {
+pub async fn get_game_db(
+    db: &Collection<ShuuroGame>,
+    id: &String,
+) -> Option<ShuuroGame> {
     let db = db.clone();
     let id = String::from(id);
     let filter = doc! {"_id": id};
@@ -82,13 +85,19 @@ pub async fn get_game_db(db: &Collection<ShuuroGame>, id: &String) -> Option<Shu
 }
 
 /// Add new game to database and format ws message.
-pub async fn add_game_to_db(db: &Collection<ShuuroGame>, game: &ShuuroGame) -> Value {
+pub async fn add_game_to_db(
+    db: &Collection<ShuuroGame>,
+    game: &ShuuroGame,
+) -> Value {
     if let Err(_res) = db.insert_one(game, None).await {}
     serde_json::json!({"t": "live_game_start", "game_id": &game._id, "game_info": &game})
 }
 
 /// Update all fields for game.
-pub async fn update_entire_game(db: &Collection<ShuuroGame>, game: &ShuuroGame) {
+pub async fn update_entire_game(
+    db: &Collection<ShuuroGame>,
+    game: &ShuuroGame,
+) {
     let query = doc! {"_id": &game._id};
     let update = doc! {"$set": bson::to_bson(&game).unwrap()};
     db.update_one(query, update, None).await.ok();
@@ -106,14 +115,18 @@ pub async fn get_player_games(
     let filter = doc! {"players": {"$in": [username]}};
     let q = db.find(filter, options).await;
     if let Ok(res) = q {
-        let games: Vec<ShuuroGame> = res.try_collect().await.unwrap_or_else(|_| vec![]);
+        let games: Vec<ShuuroGame> =
+            res.try_collect().await.unwrap_or_else(|_| vec![]);
         return Some(games);
     }
     None
 }
 
 /// Get article if ID exist.
-pub async fn get_article(db: &Collection<Article>, id: &String) -> Option<Article> {
+pub async fn get_article(
+    db: &Collection<Article>,
+    id: &String,
+) -> Option<Article> {
     let filter = doc! {"_id": id};
     if let Ok(n) = db.find_one(filter, None).await {
         if let Some(n) = n {
@@ -124,13 +137,16 @@ pub async fn get_article(db: &Collection<Article>, id: &String) -> Option<Articl
 }
 
 /// get all unfinished matches
-pub async fn unfinished(db: &Collection<ShuuroGame>) -> HashMap<String, ShuuroGame> {
+pub async fn unfinished(
+    db: &Collection<ShuuroGame>,
+) -> HashMap<String, ShuuroGame> {
     let db = db.clone();
     let filter = doc! {"status" : {"$lt": &0}};
     let mut hm = HashMap::new();
     let c = db.find(filter, None);
     if let Ok(c) = c.await {
-        let games: Vec<ShuuroGame> = c.try_collect().await.unwrap_or_else(|_| vec![]);
+        let games: Vec<ShuuroGame> =
+            c.try_collect().await.unwrap_or_else(|_| vec![]);
         for g in games {
             hm.insert(String::from(&g._id), g);
         }

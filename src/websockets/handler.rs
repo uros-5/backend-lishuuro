@@ -3,11 +3,11 @@ use std::sync::Arc;
 use axum::{
     extract::{
         ws::{Message, WebSocket},
-        WebSocketUpgrade,
+        State, WebSocketUpgrade,
     },
     headers::UserAgent,
     response::IntoResponse,
-    Extension, TypedHeader,
+    TypedHeader,
 };
 use futures::{SinkExt, StreamExt};
 use serde_json::Value;
@@ -16,9 +16,13 @@ use tokio::sync::broadcast;
 use crate::{
     database::{queries::get_game_db, redis::UserSession, Database},
     websockets::{rooms::ChatMsg, SendTo},
+    AppState,
 };
 
-use super::{ClientMessage, GameGet, GameRequest, MessageHandler, MsgDatabase, MsgSender, WsState};
+use super::{
+    ClientMessage, GameGet, GameRequest, MessageHandler, MsgDatabase,
+    MsgSender, WsState,
+};
 
 macro_rules! send_or_break {
     ($sender: expr, $msg: expr, $username: expr) => {
@@ -37,19 +41,23 @@ macro_rules! send_or_break {
 pub async fn websocket_handler(
     ws: WebSocketUpgrade,
     _user_agent: Option<TypedHeader<UserAgent>>,
-    Extension(db): Extension<Arc<Database>>,
-    Extension(live): Extension<Arc<WsState>>,
+    State(state): State<AppState>,
     user: UserSession,
 ) -> impl IntoResponse {
     let headers = &user.headers();
     (
         headers.clone(),
-        ws.on_upgrade(|socket| websocket(socket, db, live, user)),
+        ws.on_upgrade(|socket| websocket(socket, state.db, state.ws, user)),
     )
 }
 
 /// Handler for websocket messages.
-async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user: UserSession) {
+async fn websocket(
+    stream: WebSocket,
+    db: Arc<Database>,
+    ws: Arc<WsState>,
+    user: UserSession,
+) {
     let (mut sender, mut receiver) = stream.split();
 
     let mut rx = ws.tx.subscribe();
@@ -65,7 +73,7 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
         while let Ok(msg) = rx.recv().await {
             match &msg.to {
                 SendTo::Me => {
-                    if &msg.username == &username {
+                    if msg.username == username {
                         send_or_break!(&mut sender, msg, &username);
                     }
                 }
@@ -97,7 +105,8 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
 
     let mut socket_recv_task = tokio::spawn(async move {
         let msg_sender = MsgSender::new(&user, &tx);
-        let handler = MessageHandler::new(&user, &ws, &tx, &db, &db_tx, msg_sender);
+        let handler =
+            MessageHandler::new(&user, &ws, &tx, &db, &db_tx, msg_sender);
         handler.connecting(true);
         handler.start_unfinished_clock().await;
         while let Some(Ok(msg)) = receiver.next().await {
@@ -108,11 +117,15 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
                         match data_type {
                             serde_json::Value::String(t) => {
                                 if t == "live_chat_message" {
-                                    if let Ok(mut m) = serde_json::from_str::<ChatMsg>(&text) {
+                                    if let Ok(mut m) =
+                                        serde_json::from_str::<ChatMsg>(&text)
+                                    {
                                         handler.new_chat_msg(&mut m);
                                     }
                                 } else if t == "live_chat_full" {
-                                    if let Ok(m) = serde_json::from_str::<GameGet>(&text) {
+                                    if let Ok(m) =
+                                        serde_json::from_str::<GameGet>(&text)
+                                    {
                                         handler.get_chat(m.game_id);
                                     }
                                 } else if t == "active_players_full" {
@@ -120,53 +133,95 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
                                 } else if t == "active_players_count" {
                                     handler.get_players_count();
                                 } else if t == "live_game_remove_spectator" {
-                                    if let Ok(m) = serde_json::from_str::<GameGet>(&text) {
+                                    if let Ok(m) =
+                                        serde_json::from_str::<GameGet>(&text)
+                                    {
                                         handler.remove_spectator(&m.game_id);
                                     }
                                 } else if t == "home_lobby_add" {
-                                    if let Ok(g) = serde_json::from_str::<GameRequest>(&text) {
+                                    if let Ok(g) =
+                                        serde_json::from_str::<GameRequest>(
+                                            &text,
+                                        )
+                                    {
                                         handler.add_game_req(g);
                                     }
                                 } else if t == "home_lobby_full" {
                                     handler.get_all_game_reqs();
                                 } else if t == "home_lobby_accept" {
-                                    if let Ok(g) = serde_json::from_str::<GameRequest>(&text) {
+                                    if let Ok(g) =
+                                        serde_json::from_str::<GameRequest>(
+                                            &text,
+                                        )
+                                    {
                                         handler.check_game_req(g).await;
                                     }
                                 } else if t == "live_game_hand" {
-                                    if let Ok(m) = serde_json::from_str::<GameGet>(&text) {
+                                    if let Ok(m) =
+                                        serde_json::from_str::<GameGet>(&text)
+                                    {
                                         handler.get_hand(&m.game_id);
                                     }
                                 } else if t == "live_game_confirmed" {
-                                    if let Ok(m) = serde_json::from_str::<GameGet>(&text) {
+                                    if let Ok(m) =
+                                        serde_json::from_str::<GameGet>(&text)
+                                    {
                                         handler.get_confirmed(&m.game_id);
                                     }
                                 } else if t == "live_game_start" {
-                                    if let Ok(g) = serde_json::from_str::<GameGet>(&text) {
-                                        handler.get_game(&g.game_id, &user.username).await;
+                                    if let Ok(g) =
+                                        serde_json::from_str::<GameGet>(&text)
+                                    {
+                                        handler
+                                            .get_game(
+                                                &g.game_id,
+                                                &user.username,
+                                            )
+                                            .await;
                                     }
-                                } else if t == "live_game_buy" || t == "live_game_confirm" {
-                                    if let Ok(g) = serde_json::from_str::<GameGet>(&text) {
+                                } else if t == "live_game_buy"
+                                    || t == "live_game_confirm"
+                                {
+                                    if let Ok(g) =
+                                        serde_json::from_str::<GameGet>(&text)
+                                    {
                                         handler.shop_move(g);
                                     }
                                 } else if t == "live_game_place" {
-                                    if let Ok(g) = serde_json::from_str::<GameGet>(&text) {
+                                    if let Ok(g) =
+                                        serde_json::from_str::<GameGet>(&text)
+                                    {
                                         handler.place_move(g).await;
                                     }
                                 } else if t == "live_game_play" {
-                                    if let Ok(g) = serde_json::from_str::<GameGet>(&text) {
+                                    if let Ok(g) =
+                                        serde_json::from_str::<GameGet>(&text)
+                                    {
                                         handler.fight_move(g).await;
                                     }
                                 } else if t == "live_game_draw" {
-                                    if let Ok(g) = serde_json::from_str::<GameGet>(&text) {
-                                        handler.draw_req(&g.game_id, &user.username).await;
+                                    if let Ok(g) =
+                                        serde_json::from_str::<GameGet>(&text)
+                                    {
+                                        handler
+                                            .draw_req(
+                                                &g.game_id,
+                                                &user.username,
+                                            )
+                                            .await;
                                     }
                                 } else if t == "live_game_resign" {
-                                    if let Ok(g) = serde_json::from_str::<GameGet>(&text) {
-                                        handler.resign(&g.game_id, &user.username).await;
+                                    if let Ok(g) =
+                                        serde_json::from_str::<GameGet>(&text)
+                                    {
+                                        handler
+                                            .resign(&g.game_id, &user.username)
+                                            .await;
                                     }
                                 } else if t == "live_game_sfen" {
-                                    if let Ok(json) = serde_json::from_str::<GameGet>(&text) {
+                                    if let Ok(json) =
+                                        serde_json::from_str::<GameGet>(&text)
+                                    {
                                         handler.get_sfen(&json);
                                     }
                                 } else if t == "live_tv" {
@@ -194,9 +249,14 @@ async fn websocket(stream: WebSocket, db: Arc<Database>, ws: Arc<WsState>, user:
         while let Ok(msg) = db_rx.recv().await {
             match &msg {
                 MsgDatabase::GetGame(id) => {
-                    if let Some(game) = get_game_db(&db2.mongo.games, id).await {
+                    if let Some(game) = get_game_db(&db2.mongo.games, id).await
+                    {
                         let msg = serde_json::json!({"t": "live_game_start", "game_id": id, "game_info": &game});
-                        let _ = tx2.send(ClientMessage::new(&user2, msg, SendTo::Me));
+                        let _ = tx2.send(ClientMessage::new(
+                            &user2,
+                            msg,
+                            SendTo::Me,
+                        ));
                     }
                 }
                 _ => (),

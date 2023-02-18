@@ -20,8 +20,8 @@ impl PostLoginToken {
     /// Creating new lichess user token.
     pub fn new(code_verifier: &String, code: &String) -> Self {
         PostLoginToken {
-            code: format!("{}", code),
-            code_verifier: format!("{}", code_verifier),
+            code: code.to_string(),
+            code_verifier: code_verifier.to_string(),
         }
     }
 
@@ -84,22 +84,19 @@ impl Default for MyKey {
     }
 }
 
-
 /// My server url.
 pub fn curr_url(prod: bool) -> (&'static str, &'static str) {
     if prod {
         ("https://lishuuro.org/w", "https://lishuuro.org")
     } else {
-        ("http://localhost:8080", "http://localhost:3000")
+        ("http://localhost:8080", "http://localhost:5173")
     }
 }
 
 pub fn cookies(prod: bool) -> CookieValue {
     if prod {
         CookieValue::new("None", "true", "true")
-    }
-    else {
+    } else {
         CookieValue::new("Lax", "/", "/")
     }
-    
 }

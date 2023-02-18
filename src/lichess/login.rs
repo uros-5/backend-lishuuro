@@ -9,7 +9,7 @@ use base64::encode;
 use rand::Rng;
 
 /// Start of login process.
-pub fn login_url(login_state: &String, prod: bool) -> (Url, String) {
+pub fn login_url(login_state: &str, prod: bool) -> (Url, String) {
     let url = "https://lichess.org/oauth?";
     let verifier: String = create_verifier();
     let challenge: String = create_challenge(&verifier);
@@ -17,7 +17,7 @@ pub fn login_url(login_state: &String, prod: bool) -> (Url, String) {
     let r = format!("{}/callback", curr_url(prod).0);
 
     let queries = [
-        ("state", login_state.as_str()),
+        ("state", login_state),
         ("response_type", "code"),
         ("client_id", "lishuuro"),
         ("redirect_uri", &r),
@@ -37,27 +37,23 @@ pub fn random_username() -> String {
     format!(
         "Anon-{}",
         encode(rand::thread_rng().gen::<[u8; 6]>())
-            .replace("+", "")
-            .replace("/", "")
-            .replace("=", "")
+            .replace(['+', '/', '='], "")
     )
 }
 
 /// Generate random game id.
 pub fn random_game_id() -> String {
-    format!(
-        "{}",
-        encode(rand::thread_rng().gen::<[u8; 10]>())
-            .replace("+", "")
-            .replace("/", "")
-            .replace("=", "")
-    )
+    encode(rand::thread_rng().gen::<[u8; 10]>()).replace(['+', '/', '='], "")
 }
 
 /// Getting lichess token.
-pub async fn get_lichess_token(code: &String, code_verifier: &String, prod: bool) -> Token {
+pub async fn get_lichess_token(
+    code: &String,
+    code_verifier: &String,
+    prod: bool,
+) -> Token {
     let url = "https://lichess.org/api/token";
-    let body = PostLoginToken::new(&code_verifier, code);
+    let body = PostLoginToken::new(code_verifier, code);
     let body = body.to_json(prod);
     let client = Client::default();
     let req = client.post(url).json(&body).send();
@@ -68,7 +64,7 @@ pub async fn get_lichess_token(code: &String, code_verifier: &String, prod: bool
             return tok;
         }
     }
-    return Token::default();
+    Token::default()
 }
 
 /// If user exist then we have login data.
@@ -83,7 +79,7 @@ pub async fn get_lichess_user(token: String) -> String {
     if let Ok(i) = res {
         let json = i.json::<LoginData>().await;
         if let Ok(data) = json {
-            return String::from(data.username);
+            return data.username;
         }
     }
     String::from("")

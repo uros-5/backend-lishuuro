@@ -1,9 +1,10 @@
 use async_session::{async_trait, Session};
 use axum::{
-    extract::{Extension, FromRequest, RequestParts},
+    extract::{FromRef, FromRequestParts},
     headers::Cookie,
+    http::request::Parts,
     http::HeaderValue,
-    TypedHeader,
+    RequestPartsExt, TypedHeader,
 };
 use bson::DateTime;
 use hyper::{header::SET_COOKIE, HeaderMap, StatusCode};
@@ -12,9 +13,9 @@ use redis::{aio::ConnectionManager, AsyncCommands, Client};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 
-use crate::{arc2, lichess::cookies};
+use crate::{arc2, lichess::cookies, AppState};
 
-use super::{mongo::Player, queries::create_player, Database};
+use super::{mongo::Player, queries::create_player};
 
 pub const AXUM_SESSION_COOKIE_NAME: &str = "axum_session";
 
@@ -70,7 +71,7 @@ impl UserSession {
     pub fn headers(&self) -> HeaderMap {
         let mut headers = HeaderMap::new();
         if self.is_new {
-            let max_age = 60*60*24*365;
+            let max_age = 60 * 60 * 24 * 365;
             let cookie = format!(
                 "{}={}; {} max-age={}; Path=/",
                 AXUM_SESSION_COOKIE_NAME,
@@ -108,8 +109,11 @@ impl CookieValue {
         if &self.same_site == "Lax" {
             return format!("SameSite={};", &self.same_site);
         }
-        format!("SameSite={}; Secure={}; HttpOnly={};", &self.same_site, &self.secure, &self.http_only)
-    }    
+        format!(
+            "SameSite={}; Secure={}; HttpOnly={};",
+            &self.same_site, &self.secure, &self.http_only
+        )
+    }
 }
 
 impl Default for CookieValue {
@@ -154,7 +158,10 @@ impl RedisCli {
             .unwrap();
         let _e = self
             .con
-            .expire::<String, usize>(String::from(key), self.ttl_days(value.reg))
+            .expire::<String, usize>(
+                String::from(key),
+                self.ttl_days(value.reg),
+            )
             .await;
     }
 
@@ -169,7 +176,13 @@ impl RedisCli {
             let s = Session::new();
             if let Some(_) = self.get_session(s.id()).await {
             } else {
-                let value = UserSession::new(&username, s.id(), false, "", cookie_value);
+                let value = UserSession::new(
+                    &username,
+                    s.id(),
+                    false,
+                    "",
+                    cookie_value,
+                );
                 self.set_session(s.id(), value.clone()).await;
                 return value;
             }
@@ -187,33 +200,39 @@ impl RedisCli {
 }
 
 #[async_trait]
-impl<B> FromRequest<B> for UserSession
+impl<S> FromRequestParts<S> for UserSession
 where
-    B: Send,
+    AppState: FromRef<S>,
+    S: Send + Sync,
 {
     type Rejection = (StatusCode, &'static str);
 
-    async fn from_request(req: &mut RequestParts<B>) -> Result<Self, Self::Rejection> {
-        let Extension(db) = Extension::<Arc<Database>>::from_request(req)
-            .await
-            .expect("db is missing");
-        let cookie = Option::<TypedHeader<Cookie>>::from_request(req)
-            .await
-            .unwrap();
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        let store = AppState::from_ref(state);
+        let cookie: Option<TypedHeader<Cookie>> =
+            parts.extract().await.unwrap();
 
-        let mut redis = db.redis.clone();
-        let prod = db.key.prod;
+        let mut redis = store.db.redis.clone();
+        let prod = store.db.key.prod;
         let cookie_value = cookies(prod);
 
         let session_cookie = cookie
             .as_ref()
             .and_then(|cookie| cookie.get(AXUM_SESSION_COOKIE_NAME));
-        if session_cookie.is_none() == false {
-            if let Some(session) = redis.get_session(session_cookie.unwrap()).await {
+        if session_cookie.is_some() {
+            if let Some(session) =
+                redis.get_session(session_cookie.unwrap()).await
+            {
                 return Ok(session);
             }
         }
-        let session = redis.new_session(&db.mongo.players, cookie_value).await;
+        let session = redis
+            .new_session(&store.db.mongo.players, cookie_value)
+            .await;
+
         return Ok(session);
     }
 }

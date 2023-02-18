@@ -5,7 +5,7 @@ use super::{
     ClientMessage, GameReqs, ShuuroGames,
 };
 use mongodb::Collection;
-use tokio::sync::broadcast::{self};
+use tokio::sync::broadcast;
 
 /// This struct contains all data.
 pub struct WsState {

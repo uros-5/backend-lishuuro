@@ -2,11 +2,16 @@ use async_session::chrono::Duration;
 use bson::DateTime;
 use mongodb::{options::ClientOptions, Client, Collection};
 use serde::{Deserialize, Serialize};
-use shuuro::{Position, Shop};
+use shuuro::shuuro12::bitboard12::BB12;
+use shuuro::shuuro12::position12::P12;
+use shuuro::shuuro12::square12::Square12;
+use shuuro::Shop;
 
 use crate::websockets::{time_control::TimeControl, GameRequest};
 
-use super::serde_helpers::{array_i32_duration, duration_i32, duration_i32_array, i32_duration};
+use super::serde_helpers::{
+    array_i32_duration, duration_i32, duration_i32_array, i32_duration,
+};
 
 // MONGODB MODELS
 
@@ -20,11 +25,13 @@ pub struct Mongo {
 impl Mongo {
     /// Create mongodb connection for all collections.
     pub async fn new() -> Self {
-        let mut client_options = ClientOptions::parse("mongodb://127.0.0.1:27017")
-            .await
-            .expect("No client available");
+        let mut client_options =
+            ClientOptions::parse("mongodb://127.0.0.1:27017")
+                .await
+                .expect("No client available");
         client_options.app_name = Some("lishuuro".to_string());
-        let client = Client::with_options(client_options).expect("client not found");
+        let client =
+            Client::with_options(client_options).expect("client not found");
         let db = client.database("lishuuro");
         let players = db.collection::<Player>("users");
         let games = db.collection::<ShuuroGame>("shuuroGames");
@@ -36,6 +43,8 @@ impl Mongo {
         }
     }
 }
+
+pub type History = (Vec<String>, Vec<String>, Vec<String>);
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 /// Representing one player
@@ -81,8 +90,12 @@ pub struct ShuuroGame {
     pub sfen: String,
     #[serde(skip_serializing)]
     #[serde(skip_deserializing)]
-    pub shuuro: (Shop, Position, Position),
-    pub history: (Vec<(String, u8)>, Vec<(String, u16)>, Vec<(String, u16)>),
+    pub shuuro: (
+        Shop<Square12>,
+        P12<Square12, BB12<Square12>>,
+        P12<Square12, BB12<Square12>>,
+    ),
+    pub history: History,
     pub tc: TimeControl,
     #[serde(skip_serializing)]
     #[serde(skip_deserializing)]
@@ -98,7 +111,7 @@ impl From<(&GameRequest, &[String; 2], &str)> for ShuuroGame {
             incr: Duration::seconds(f.0.incr),
             players: f.1.clone(),
             side_to_move: 0,
-            clocks: [clock, clock.clone()],
+            clocks: [clock.clone(), clock],
             last_clock: DateTime::now(),
             current_stage: 0,
             result: String::from(""),
@@ -107,7 +120,7 @@ impl From<(&GameRequest, &[String; 2], &str)> for ShuuroGame {
             credits: [800, 800],
             hands: [String::from(""), String::from("")],
             sfen: String::from(""),
-            shuuro: (Shop::default(), Position::default(), Position::default()),
+            shuuro: (Shop::default(), P12::default(), P12::default()),
             history: (vec![], vec![], vec![]),
             tc: TimeControl::new(f.0.time, f.0.incr),
             draws: [false, false],

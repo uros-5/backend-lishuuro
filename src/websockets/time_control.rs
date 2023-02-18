@@ -27,7 +27,8 @@ impl Default for TimeControl {
 
 impl From<&ShuuroGame> for TimeControl {
     fn from(s: &ShuuroGame) -> Self {
-        let last_click = DateTime::parse_from_str(&s.last_clock.to_string(), "%+").unwrap();
+        let last_click =
+            DateTime::parse_from_str(&s.last_clock.to_string(), "%+").unwrap();
         Self {
             last_click,
             clocks: s.clocks.clone(),
@@ -91,7 +92,7 @@ impl TimeControl {
     /// Update last click.
     fn update_last_click(&mut self, color: usize, current: Duration) {
         if self.incr == 0 && self.stage == 0 {
-            return ;
+            return;
         }
         let duration = current.checked_add(&self.incr()).unwrap();
         self.clocks[color] = duration;
