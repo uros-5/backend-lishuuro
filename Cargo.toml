@@ -30,6 +30,7 @@ json_value_merge = "1.1.2"
 chrono = "0.4.19"
 shuuro = {git = "https://github.com/uros-5/shuuro", branch = "extended", features = ["shuuro12"]}
 ctrlc = "3.2.3"
+dotenv = "0.15.0"
 
 [dependencies.mongodb]
 version = "2.3.1"

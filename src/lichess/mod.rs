@@ -1,5 +1,4 @@
-use std::fs::File;
-use std::path::Path;
+use std::env;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -71,10 +70,11 @@ pub struct MyKey {
 
 impl Default for MyKey {
     fn default() -> Self {
-        let fp = Path::new("src/lichess/my_key.json");
-        if let Ok(f) = File::open(fp) {
-            if let Ok(my_key) = serde_json::from_reader::<File, MyKey>(f) {
-                return my_key;
+        if let Ok(login_state) = env::var("LOGIN_STATE") {
+            if let Ok(prod) = env::var("PROD") {
+                if let Ok(prod) = prod.parse::<bool>() {
+                    return MyKey { prod, login_state };
+                }
             }
         }
         MyKey {

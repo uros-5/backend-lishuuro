@@ -22,6 +22,7 @@ use crate::{
 
 #[tokio::main]
 async fn main() {
+    dotenv::dotenv().ok();
     let db = Database::new().await;
     let cors_layer = cors(&db.key);
     let db = Arc::new(db);
