@@ -24,8 +24,8 @@ pub async fn create_player(db: &Collection<Player>) -> String {
         };
         let res = db.insert_one(&player, None).await;
         // Player is added, therefore it's new.
-        if let Ok(_) = res {
-            return format!("{}", &username);
+        if res.is_ok() {
+            return (username).to_string();
         }
     }
 }
@@ -45,7 +45,7 @@ pub async fn player_exist(
         session.is_new = true;
         session.new_username(username);
         session.new_register();
-        if let Some(_) = player {
+        if player.is_some() {
             // Player exist.
             return Some(session);
         } else {
@@ -61,7 +61,7 @@ pub async fn player_exist(
 pub async fn game_exist(db: &Collection<ShuuroGame>) -> String {
     loop {
         let id = random_game_id();
-        if let Some(_) = get_game_db(db, &id).await {
+        if (get_game_db(db, &id).await).is_some() {
             continue;
         }
         return id;

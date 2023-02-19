@@ -174,7 +174,7 @@ impl RedisCli {
         let username = create_player(players).await;
         loop {
             let s = Session::new();
-            if let Some(_) = self.get_session(s.id()).await {
+            if (self.get_session(s.id()).await).is_some() {
             } else {
                 let value = UserSession::new(
                     &username,
