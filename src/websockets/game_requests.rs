@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 
 use crate::arc2;
 
-pub const VARIANTS: [&str; 2] = ["shuuro12", "shuuro12fairy"];
+pub const VARIANTS: [&str; 2] = ["shuuro12", "shuuroFairy"];
 pub const DURATION_RANGE: [i64; 28] = [
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 25,
     30, 35, 40, 45, 60, 75, 90,
@@ -27,14 +27,11 @@ pub struct GameRequest {
 impl GameRequest {
     /// Return true if game has valid time.
     pub fn is_valid(&self) -> bool {
-        if VARIANTS.contains(&self.variant.as_str()) {
-            if DURATION_RANGE.contains(&self.time) {
-                if DURATION_RANGE.contains(&self.incr) {
-                    return true;
-                } else if &self.incr == &0 {
-                    return true;
-                }
-            }
+        if VARIANTS.contains(&self.variant.as_str())
+            && DURATION_RANGE.contains(&self.time)
+            && (DURATION_RANGE.contains(&self.incr) || self.incr == 0)
+        {
+            return true;
         }
         false
     }

@@ -112,7 +112,7 @@ impl ShuuroGames {
     pub fn change_variant(&self, id: &String, variant: &String) {
         let mut all = self.all.lock().unwrap();
         if let Some(g) = all.get_mut(id) {
-            if variant == "shuuro12fairy" {
+            if variant == "shuuroFairy" {
                 g.shuuro.0.change_variant(&String::from("shuuroFairy"));
                 g.shuuro.1.update_variant(Variant::ShuuroFairy);
                 g.shuuro.2.update_variant(Variant::ShuuroFairy);

@@ -1,5 +1,5 @@
 # backend-lishuuro
-# ♟️ Backend code for lishuuro. ♟️
+### ♟️ Backend code for lishuuro. ♟️
 
 This small chess server is written in Rust language(Axum framework). :crab:
 
