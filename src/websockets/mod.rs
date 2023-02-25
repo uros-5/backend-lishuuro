@@ -2,6 +2,7 @@ pub mod client_messages;
 pub mod game_requests;
 pub mod games;
 pub mod handler;
+pub mod live_game;
 pub mod messages;
 pub mod rooms;
 pub mod state;
