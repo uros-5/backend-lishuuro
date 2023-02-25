@@ -1,12 +1,14 @@
 use std::{
+    collections::HashMap,
     hash::Hash,
     marker::PhantomData,
     ops::{BitAnd, BitOr, BitOrAssign, Not},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, MutexGuard},
 };
 
 use bson::DateTime as DT;
 use chrono::Utc;
+use mongodb::Collection;
 use serde_json::Value;
 use shuuro::{
     attacks::Attacks,
@@ -16,12 +18,20 @@ use shuuro::{
     Square, Variant,
 };
 
-use crate::database::mongo::ShuuroGame;
+use crate::{
+    arc2,
+    database::{
+        mongo::ShuuroGame, queries::update_entire_game, redis::UserSession,
+    },
+};
 
-use super::{time_control::TimeCheck, GameGet, LiveGameMove};
+use super::{
+    time_control::TimeCheck, GameGet, LiveGameMove, MessageHandler,
+    MsgDatabase, TvGame,
+};
 
 #[derive(Debug, Clone)]
-pub struct LiveGame<S, B, P, A>
+pub struct LiveGame<S, B, A, P>
 where
     S: Square + Hash,
     B: BitBoard<S>,
@@ -43,7 +53,7 @@ where
     _a: PhantomData<A>,
 }
 
-impl<S, B, P, A> LiveGame<S, B, P, A>
+impl<S, B, A, P> LiveGame<S, B, A, P>
 where
     S: Square + Hash,
     B: BitBoard<S>,
@@ -57,6 +67,17 @@ where
     for<'a> &'a B: BitAnd<&'a S, Output = B>,
     for<'a> B: BitOrAssign<&'a S>,
 {
+    fn new(game: ShuuroGame) -> Self {
+        Self {
+            _b: PhantomData,
+            _a: PhantomData,
+            shop: Shop::<S>::default(),
+            placement: P::new(),
+            fight: P::new(),
+            game,
+        }
+    }
+
     // SHOP PART
 
     /// Change variant from the start of the game.
@@ -69,6 +90,7 @@ where
 
     /// Get hand for active player.
     pub fn get_hand(&self, index: usize) -> String {
+        let c = self.placement.clone();
         let color = Color::from(index);
         self.shop.to_sfen(color)
     }
@@ -254,6 +276,28 @@ where
         self.fight.in_check(self.fight.side_to_move().flip())
     }
 
+    pub fn fight_move(
+        &mut self,
+        json: &GameGet,
+        player: &String,
+    ) -> Option<LiveGameMove> {
+        if self.game.current_stage != 2 {
+            return None;
+        }
+        if let Some(index) = self.player_index(&self.game.players, player) {
+            if self.fight.side_to_move() != Color::from(index) {
+                return None;
+            }
+            if let Some(clocks) = self.game.tc.click(index) {
+                self.game.draws = [false, false];
+                self.game.clocks = self.game.tc.clocks;
+                self.game.last_clock = DT::now();
+                return self.make_move(json, index, clocks);
+            }
+        }
+        None
+    }
+
     pub fn make_move(
         &mut self,
         json: &GameGet,
@@ -300,7 +344,7 @@ where
         None
     }
 
-    fn player_index(&self, p: &[String; 2], u: &String) -> Option<usize> {
+    pub fn player_index(&self, p: &[String; 2], u: &String) -> Option<usize> {
         p.iter().position(|x| x == u)
     }
 
@@ -329,9 +373,8 @@ where
     /// After every 500ms, this function returns who lost on time.
     pub fn clock_status(
         &mut self,
-        time_check: &Arc<Mutex<TimeCheck>>,
+        time_check: MutexGuard<TimeCheck>,
     ) -> Option<(Value, Value, [String; 2])> {
-        let time_check = time_check.lock().unwrap();
         if time_check.both_lost {
             self.game.status = 5;
         } else {
@@ -358,9 +401,7 @@ where
     }
 
     /// Check clocks for current stage.
-    pub fn check_clocks(&self, time_check: &Arc<Mutex<TimeCheck>>) {
-        let id = String::from(&time_check.lock().unwrap().id);
-        drop(id);
+    pub fn check_clocks(&self, mut time_check: MutexGuard<TimeCheck>) {
         if self.game.current_stage == 0 {
             let durations = [
                 self.game.tc.current_duration(0),
@@ -369,24 +410,24 @@ where
             let confirmed = self.confirmed();
             if durations == [None, None] {
                 if confirmed == [false, false] {
-                    time_check.lock().unwrap().both_lost();
+                    time_check.both_lost();
                 } else if let Some(confirmed) =
                     confirmed.iter().position(|i| i == &false)
                 {
-                    time_check.lock().unwrap().lost(confirmed);
+                    time_check.lost(confirmed);
                 }
             } else if let Some(index) =
                 durations.iter().position(|p| p.is_none())
             {
-                time_check.lock().unwrap().lost(index);
+                time_check.lost(index);
             }
         } else if self.game.current_stage != 0 {
             let stm = self.game.side_to_move;
             if self.game.tc.current_duration(stm as usize).is_none() {
-                time_check.lock().unwrap().lost(stm as usize);
+                time_check.lost(stm as usize);
             }
         }
-        time_check.lock().unwrap().dont_exist();
+        time_check.dont_exist();
     }
 
     /// After match is finished, update status.
@@ -439,5 +480,306 @@ where
             return Some(self.game.players.clone());
         }
         None
+    }
+}
+
+pub type LiveGames<S, B, A, P> =
+    Arc<Mutex<HashMap<String, LiveGame<S, B, A, P>>>>;
+
+#[derive(Clone, Debug)]
+pub struct ShuuroGames2<S, B, A, P>
+where
+    S: Square + Hash,
+    B: BitBoard<S>,
+    A: Attacks<S, B>,
+    P: Position<S, B, A>,
+    Self: Sized,
+    for<'a> &'a B: BitOr<&'a B, Output = B>,
+    for<'a> &'a B: BitAnd<&'a B, Output = B>,
+    for<'a> &'a B: Not<Output = B>,
+    for<'a> &'a B: BitOr<&'a S, Output = B>,
+    for<'a> &'a B: BitAnd<&'a S, Output = B>,
+{
+    all: LiveGames<S, B, A, P>,
+    unfinished: Arc<Mutex<Vec<String>>>,
+}
+
+impl<S, B, A, P> ShuuroGames2<S, B, A, P>
+where
+    S: Square + Hash,
+    B: BitBoard<S>,
+    A: Attacks<S, B>,
+    P: Position<S, B, A>,
+    Self: Sized,
+    for<'a> &'a B: BitOr<&'a B, Output = B>,
+    for<'a> &'a B: BitAnd<&'a B, Output = B>,
+    for<'a> &'a B: Not<Output = B>,
+    for<'a> &'a B: BitOr<&'a S, Output = B>,
+    for<'a> &'a B: BitAnd<&'a S, Output = B>,
+{
+    /// Add new game to live games.
+    pub fn add_game(&self, game: ShuuroGame) -> usize {
+        let mut all = self.all.lock().unwrap();
+        all.insert(String::from(&game._id), LiveGame::new(game));
+        all.len()
+    }
+
+    /// Remove game after end.
+    pub async fn remove_game(&self, db: &Collection<ShuuroGame>, id: &String) {
+        let mut all = self.all.lock().unwrap();
+        if let Some(game) = all.remove(id) {
+            let db = db.clone();
+            let game = game.get_game();
+            tokio::spawn(async move {
+                update_entire_game(&db, &game).await;
+            });
+        }
+    }
+
+    /// Count all games.
+    pub fn game_count(&self) -> usize {
+        self.all.lock().unwrap().len()
+    }
+
+    /// Load games from db
+    pub fn load_unfinished(&self, hm: HashMap<String, ShuuroGame>) {
+        let mut temp = HashMap::new();
+        let mut v = vec![];
+        for i in hm {
+            //self.ws.players.new_spectators(&i.0);
+            let mut game: LiveGame<S, B, A, P> = LiveGame::new(i.1.clone());
+            v.push(String::from(&i.0));
+            if i.1.current_stage == 0 {
+                let hands = format!("{}{}", &i.1.hands[0], &i.1.hands[1]);
+                game.shop.set_hand(hands.as_str());
+                temp.insert(i.0, game);
+            } else if i.1.current_stage == 1 {
+                game.placement.set_sfen_history(i.1.history.1);
+                let _ = game.placement.set_sfen(&i.1.sfen);
+                temp.insert(i.0, game);
+            } else if i.1.current_stage == 2 {
+                game.fight.set_sfen_history(i.1.history.2);
+                let _ = game.fight.set_sfen(&i.1.sfen);
+                temp.insert(i.0, game);
+            }
+        }
+        *self.all.lock().unwrap() = temp;
+        *self.unfinished.lock().unwrap() = v;
+    }
+
+    pub fn get_unfinished(&self) -> Vec<String> {
+        let unfinished = self.unfinished.lock().unwrap();
+        let games = unfinished.clone();
+        drop(unfinished);
+        games
+    }
+
+    pub fn del_unfinished(&self) {
+        let mut unfinished = self.unfinished.lock().unwrap();
+        *unfinished = vec![];
+        drop(unfinished);
+    }
+
+    pub fn change_variant(&self, id: &String, variant: &String) {
+        let mut all = self.all.lock().unwrap();
+        if let Some(g) = all.get_mut(id) {
+            g.change_variant(variant);
+            drop(all);
+        }
+    }
+
+    pub fn get_hand(&self, id: &String, user: &UserSession) -> Option<String> {
+        let all = self.all.lock().unwrap();
+        if let Some(g) = all.get(id) {
+            if let Some(index) = g.player_index(&g.game.players, &user.username)
+            {
+                return Some(g.get_hand(index));
+            }
+        }
+        None
+    }
+
+    pub fn get_confirmed(&self, id: &String) -> Option<[bool; 2]> {
+        let all = self.all.lock().unwrap();
+        if let Some(g) = all.get(id) {
+            return Some(g.get_confirmed());
+        }
+        None
+    }
+
+    pub fn buy(&self, json: &GameGet, player: &String) -> Option<LiveGameMove> {
+        let mut all = self.all.lock().unwrap();
+        if let Some(game) = all.get_mut(&json.game_id) {
+            if let Some(p) = game.player_index(&game.game.players, player) {
+                if let Some(_c) = game.game.tc.click(p) {
+                    return game.buy_piece(json, p);
+                } else {
+                    return Some(LiveGameMove::LostOnTime(p));
+                }
+            }
+        }
+        None
+    }
+
+    pub fn place_move(
+        &self,
+        json: &GameGet,
+        player: &String,
+    ) -> Option<LiveGameMove> {
+        let mut all = self.all.lock().unwrap();
+        if let Some(game) = all.get_mut(&json.game_id) {
+            return game.place_move(json, player);
+        }
+        None
+    }
+
+    pub fn fight_move(
+        &self,
+        json: &GameGet,
+        player: &String,
+    ) -> Option<LiveGameMove> {
+        let mut all = self.all.lock().unwrap();
+        if let Some(game) = all.get_mut(&json.game_id) {
+            return game.fight_move(json, player);
+        }
+        None
+    }
+
+    pub fn set_deploy(&self, id: &String) -> Option<Value> {
+        if let Some(game) = self.all.lock().unwrap().get_mut(id) {
+            return Some(game.set_deploy(id));
+        }
+        None
+    }
+
+    pub fn draw_req(
+        &self,
+        id: &String,
+        username: &String,
+    ) -> Option<(i8, [String; 2])> {
+        if let Some(game) = self.all.lock().unwrap().get_mut(id) {
+            return game.draw_req(username);
+        }
+        None
+    }
+
+    pub fn get_players(&self, id: &String) -> Option<[String; 2]> {
+        if let Some(game) = self.all.lock().unwrap().get(id) {
+            return Some(game.game.players.clone());
+        }
+        None
+    }
+
+    pub fn clock_status(
+        &self,
+        time_check: &Arc<Mutex<TimeCheck>>,
+    ) -> Option<(Value, Value, [String; 2])> {
+        let time_check = time_check.lock().unwrap();
+        if let Some(g) = self
+            .all
+            .lock()
+            .unwrap()
+            .get_mut(&String::from(&time_check.id))
+        {
+            return g.clock_status(time_check);
+        }
+        drop(time_check);
+        None
+    }
+
+    pub fn check_clocks(&self, time_check: &Arc<Mutex<TimeCheck>>) {
+        let time_check = time_check.lock().unwrap();
+        let id = String::from(&time_check.id);
+        if let Some(game) = self.all.lock().unwrap().get(&id) {
+            game.check_clocks(time_check);
+        }
+    }
+
+    pub async fn get_game<'a>(
+        &self,
+        id: &String,
+        _db: &Collection<ShuuroGame>,
+        s: &'a MessageHandler<'a>,
+    ) -> Option<ShuuroGame> {
+        let id = String::from(id);
+        let all = self.all.lock().unwrap();
+        if let Some(g) = all.get(&id) {
+            return Some(g.game.clone());
+        }
+        let _ = s.db_tx.clone().send(MsgDatabase::GetGame(id));
+
+        None
+    }
+
+    pub fn live_sfen(&self, id: &String) -> Option<(u8, String)> {
+        if let Some(g) = self.all.lock().unwrap().get(id) {
+            return Some(g.live_sfen());
+        }
+        None
+    }
+
+    pub fn resign(
+        &self,
+        id: &String,
+        username: &String,
+    ) -> Option<[String; 2]> {
+        if let Some(g) = self.all.lock().unwrap().get_mut(id) {
+            return g.resign(username);
+        }
+        None
+    }
+
+    /// Get 20 matches for tv.
+    pub fn get_tv(&self) -> Vec<TvGame> {
+        let c = 0;
+        let mut games = vec![];
+        let all = self.all.lock().unwrap();
+        for i in all.iter() {
+            if c == 20 {
+                break;
+            }
+            let f = &i.1.game.sfen;
+            if f == "" {
+                continue;
+            }
+            let id = &i.1.game._id;
+            let w = &i.1.game.players[0];
+            let b = &i.1.game.players[1];
+            let t = "live_tv";
+            let tv = TvGame::new(t, id, w, b, f);
+            games.push(tv);
+        }
+        games
+    }
+
+    /// Before closing server save on exit.
+    pub async fn save_on_exit(&self, db: &Collection<ShuuroGame>) {
+        let all = self.all.lock().unwrap().clone();
+        for (_, game) in all {
+            update_entire_game(db, &game.game).await;
+        }
+    }
+}
+
+impl<S, B, A, P> Default for ShuuroGames2<S, B, A, P>
+where
+    S: Square + Hash,
+    B: BitBoard<S>,
+    A: Attacks<S, B>,
+    P: Position<S, B, A>,
+    Self: Sized,
+    for<'a> &'a B: BitOr<&'a B, Output = B>,
+    for<'a> &'a B: BitAnd<&'a B, Output = B>,
+    for<'a> &'a B: Not<Output = B>,
+    for<'a> &'a B: BitOr<&'a S, Output = B>,
+    for<'a> &'a B: BitAnd<&'a S, Output = B>,
+{
+    /// Load games from db
+    fn default() -> Self {
+        A::init();
+        Self {
+            all: arc2(HashMap::new()),
+            unfinished: arc2(vec![]),
+        }
     }
 }
