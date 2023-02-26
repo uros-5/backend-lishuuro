@@ -37,9 +37,23 @@ use super::{
     MsgDatabase, TvGame,
 };
 
-// macro_rules! is_live_game {
-//     ($self: ident, $method)
-// }
+macro_rules! send {
+    (0, $self: ident, $json: expr, $method: ident, $($params:expr),*) => {
+        if $json.variant.contains("12") {
+            $self.live_games12.$method($($params),*)
+        } else {
+            $self.live_games8.$method($($params),*)
+        }
+    };
+
+    (1, $self: ident, $json: expr, $method: ident, $($params:expr),*) => {
+        if $json.variant.contains("12") {
+            $self.live_games12.$method($($params),*).await
+        } else {
+            $self.live_games8.$method($($params),*).await
+        }
+    };
+}
 
 #[derive(Debug, Clone)]
 pub struct LiveGame<S, B, A, P>
@@ -818,24 +832,20 @@ pub struct ShuuroGames {
 impl ShuuroGames {
     /// Add new game to live games.
     pub fn add_game(&self, game: ShuuroGame) -> usize {
-        if game.variant == "shuuro12" {
-            self.live_games12.add_game(game)
-        } else {
-            self.live_games8.add_game(game)
-        }
+        send!(0, self, game, add_game, game)
+        // if game.variant == "shuuro12" {
+        //     self.live_games12.add_game(game)
+        // } else {
+        //     self.live_games8.add_game(game)
+        // }
     }
     /// Remove game after end.
     pub async fn remove_game(
         &self,
+        json: &GameGet,
         db: &Collection<ShuuroGame>,
-        id: &String,
-        variant: u8,
     ) {
-        if variant == 12 {
-            self.live_games12.remove_game(db, id);
-        } else {
-            self.live_games8.remove_game(db, id);
-        }
+        send!(1, self, json, remove_game, db, &json.game_id);
     }
 
     /// Count all games.
@@ -867,13 +877,7 @@ impl ShuuroGames {
     // SHOP PART
 
     pub fn change_variant(&self, json: &GameGet) {
-        if json.variant.contains("12") {
-            self.live_games12
-                .change_variant(&json.game_id, &json.variant);
-        } else {
-            self.live_games8
-                .change_variant(&json.game_id, &json.variant);
-        }
+        send!(0, self, json, change_variant, &json.game_id, &json.variant)
     }
     /// Get hand for active player.
     pub fn get_hand(
@@ -881,27 +885,15 @@ impl ShuuroGames {
         json: &GameGet,
         user: &UserSession,
     ) -> Option<String> {
-        if json.variant.contains("12") {
-            self.live_games12.get_hand(&json.game_id, user)
-        } else {
-            self.live_games8.get_hand(&json.game_id, user)
-        }
+        send!(0, self, json, get_hand, &json.game_id, user)
     }
 
     pub fn get_confirmed(&self, json: &GameGet) -> Option<[bool; 2]> {
-        if json.variant.contains("12") {
-            self.live_games12.get_confirmed(&json.game_id)
-        } else {
-            self.live_games8.get_confirmed(&json.game_id)
-        }
+        send!(0, self, json, get_confirmed, &json.game_id)
     }
 
     pub fn buy(&self, json: &GameGet, player: &String) -> Option<LiveGameMove> {
-        if &json.variant == "12" {
-            self.live_games12.buy(json, player)
-        } else {
-            self.live_games8.buy(json, player)
-        }
+        send!(0, self, json, buy, json, player)
     }
 
     // DEPLOY PART
@@ -911,11 +903,7 @@ impl ShuuroGames {
         json: &GameGet,
         player: &String,
     ) -> Option<LiveGameMove> {
-        if json.variant == "12" {
-            self.live_games12.place_move(json, player)
-        } else {
-            self.live_games8.place_move(json, player)
-        }
+        send!(0, self, json, place_move, json, player)
     }
 
     pub fn fight_move(
@@ -923,39 +911,65 @@ impl ShuuroGames {
         json: &GameGet,
         player: &String,
     ) -> Option<LiveGameMove> {
-        if json.variant == "12" {
-            self.live_games12.fight_move(json, player)
-        } else {
-            self.live_games8.fight_move(json, player)
-        }
+        send!(0, self, json, fight_move, json, player)
     }
 
     pub fn set_deploy(&self, json: &GameGet) -> Option<Value> {
-        if json.variant.contains("12") {
-            self.live_games12.set_deploy(&json.game_id)
-        } else {
-            self.live_games8.set_deploy(&json.game_id)
-        }
+        send!(0, self, json, set_deploy, &json.game_id)
     }
 
     /// DRAW PART
 
     pub fn draw_req(
         &self,
-        username: &String,
         json: &GameGet,
+        username: &String,
     ) -> Option<(i8, [String; 2])> {
-        if json.variant.contains("12") {
-            self.live_games12.draw_req(&json.game_id, username)
-        } else {
-            self.live_games8.draw_req(&json.game_id, username)
-        }
+        send!(0, self, json, draw_req, &json.game_id, username)
     }
     pub fn get_players(&self, json: &GameGet) -> Option<[String; 2]> {
-        if json.variant == "12" {
-            self.live_games12.get_players(&json.game_id)
-        } else {
-            self.live_games8.get_players(&json.game_id)
-        }
+        send!(0, self, json, get_players, &json.game_id)
+    }
+
+    /// CLOCK PART
+
+    /// After every 500ms, this function returns who lost on time.
+    pub fn clock_status(
+        &self,
+        json: &GameGet,
+        time_check: &Arc<Mutex<TimeCheck>>,
+    ) -> Option<(Value, Value, [String; 2])> {
+        send!(0, self, json, clock_status, time_check)
+    }
+
+    /// Check clocks for current stage.
+    pub fn check_clocks(
+        &self,
+        json: &GameGet,
+        time_check: &Arc<Mutex<TimeCheck>>,
+    ) {
+        send!(0, self, json, check_clocks, time_check)
+    }
+
+    pub async fn get_game<'a>(
+        &self,
+        json: &GameGet,
+        db: &Collection<ShuuroGame>,
+        s: &'a MessageHandler<'a>,
+    ) -> Option<ShuuroGame> {
+        send!(1, self, json, get_game, &json.game_id, db, s)
+    }
+
+    pub fn live_sfen(&self, json: &GameGet) -> Option<(u8, String)> {
+        send!(0, self, json, live_sfen, &json.game_id)
+    }
+
+    /// Resign if this player exist in game.
+    pub fn resign(
+        &self,
+        json: &GameGet,
+        username: &String,
+    ) -> Option<[String; 2]> {
+        send!(0, self, json, resign, &json.game_id, username)
     }
 }
