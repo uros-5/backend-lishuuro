@@ -14,6 +14,13 @@ use shuuro::{
     attacks::Attacks,
     bitboard::BitBoard,
     position::{Board, Outcome, Position, Sfen},
+    shuuro12::{
+        attacks12::Attacks12, bitboard12::BB12, position12::P12,
+        square12::Square12,
+    },
+    shuuro8::{
+        attacks8::Attacks8, bitboard8::BB8, position8::P8, square8::Square8,
+    },
     Color, Move, MoveError, MoveRecord, Piece, PieceType, SfenError, Shop,
     Square, Variant,
 };
@@ -29,6 +36,10 @@ use super::{
     time_control::TimeCheck, GameGet, LiveGameMove, MessageHandler,
     MsgDatabase, TvGame,
 };
+
+// macro_rules! is_live_game {
+//     ($self: ident, $method)
+// }
 
 #[derive(Debug, Clone)]
 pub struct LiveGame<S, B, A, P>
@@ -483,11 +494,11 @@ where
     }
 }
 
-pub type LiveGames<S, B, A, P> =
+pub type AllGames<S, B, A, P> =
     Arc<Mutex<HashMap<String, LiveGame<S, B, A, P>>>>;
 
 #[derive(Clone, Debug)]
-pub struct ShuuroGames2<S, B, A, P>
+pub struct LiveGames<S, B, A, P>
 where
     S: Square + Hash,
     B: BitBoard<S>,
@@ -500,11 +511,11 @@ where
     for<'a> &'a B: BitOr<&'a S, Output = B>,
     for<'a> &'a B: BitAnd<&'a S, Output = B>,
 {
-    all: LiveGames<S, B, A, P>,
+    all: AllGames<S, B, A, P>,
     unfinished: Arc<Mutex<Vec<String>>>,
 }
 
-impl<S, B, A, P> ShuuroGames2<S, B, A, P>
+impl<S, B, A, P> LiveGames<S, B, A, P>
 where
     S: Square + Hash,
     B: BitBoard<S>,
@@ -542,25 +553,26 @@ where
     }
 
     /// Load games from db
-    pub fn load_unfinished(&self, hm: HashMap<String, ShuuroGame>) {
+    pub fn load_unfinished(&self, hm: &HashMap<String, ShuuroGame>) {
         let mut temp = HashMap::new();
         let mut v = vec![];
         for i in hm {
             //self.ws.players.new_spectators(&i.0);
             let mut game: LiveGame<S, B, A, P> = LiveGame::new(i.1.clone());
-            v.push(String::from(&i.0));
+            let id = String::from(i.0);
+            v.push(id.clone());
             if i.1.current_stage == 0 {
                 let hands = format!("{}{}", &i.1.hands[0], &i.1.hands[1]);
                 game.shop.set_hand(hands.as_str());
-                temp.insert(i.0, game);
+                temp.insert(id, game);
             } else if i.1.current_stage == 1 {
-                game.placement.set_sfen_history(i.1.history.1);
+                game.placement.set_sfen_history(i.1.history.1.clone());
                 let _ = game.placement.set_sfen(&i.1.sfen);
-                temp.insert(i.0, game);
+                temp.insert(id, game);
             } else if i.1.current_stage == 2 {
-                game.fight.set_sfen_history(i.1.history.2);
+                game.fight.set_sfen_history(i.1.history.2.clone());
                 let _ = game.fight.set_sfen(&i.1.sfen);
-                temp.insert(i.0, game);
+                temp.insert(id, game);
             }
         }
         *self.all.lock().unwrap() = temp;
@@ -761,7 +773,7 @@ where
     }
 }
 
-impl<S, B, A, P> Default for ShuuroGames2<S, B, A, P>
+impl<S, B, A, P> Default for LiveGames<S, B, A, P>
 where
     S: Square + Hash,
     B: BitBoard<S>,
@@ -780,6 +792,170 @@ where
         Self {
             all: arc2(HashMap::new()),
             unfinished: arc2(vec![]),
+        }
+    }
+}
+
+type Live8 = LiveGames<
+    Square8,
+    BB8<Square8>,
+    Attacks8<Square8, BB8<Square8>>,
+    P8<Square8, BB8<Square8>>,
+>;
+
+type Live12 = LiveGames<
+    Square12,
+    BB12<Square12>,
+    Attacks12<Square12, BB12<Square12>>,
+    P12<Square12, BB12<Square12>>,
+>;
+
+pub struct ShuuroGames {
+    pub live_games8: Live8,
+    pub live_games12: Live12,
+}
+
+impl ShuuroGames {
+    /// Add new game to live games.
+    pub fn add_game(&self, game: ShuuroGame) -> usize {
+        if game.variant == "shuuro12" {
+            self.live_games12.add_game(game)
+        } else {
+            self.live_games8.add_game(game)
+        }
+    }
+    /// Remove game after end.
+    pub async fn remove_game(
+        &self,
+        db: &Collection<ShuuroGame>,
+        id: &String,
+        variant: u8,
+    ) {
+        if variant == 12 {
+            self.live_games12.remove_game(db, id);
+        } else {
+            self.live_games8.remove_game(db, id);
+        }
+    }
+
+    /// Count all games.
+    pub fn game_count(&self) -> usize {
+        let first = self.live_games8.game_count();
+        let second = self.live_games12.game_count();
+        first + second
+    }
+
+    /// Load games from db
+    /// First game is for `P8`
+    pub fn load_unfinished(&self, games: [HashMap<String, ShuuroGame>; 2]) {
+        self.live_games8.load_unfinished(&games[0]);
+        self.live_games12.load_unfinished(&games[1]);
+    }
+
+    pub fn get_unfinished(&self) -> [Vec<String>; 2] {
+        [
+            self.live_games8.get_unfinished(),
+            self.live_games12.get_unfinished(),
+        ]
+    }
+
+    pub fn delete_unfinished(&self) {
+        self.live_games8.del_unfinished();
+        self.live_games12.del_unfinished();
+    }
+
+    // SHOP PART
+
+    pub fn change_variant(&self, json: &GameGet) {
+        if json.variant.contains("12") {
+            self.live_games12
+                .change_variant(&json.game_id, &json.variant);
+        } else {
+            self.live_games8
+                .change_variant(&json.game_id, &json.variant);
+        }
+    }
+    /// Get hand for active player.
+    pub fn get_hand(
+        &self,
+        json: &GameGet,
+        user: &UserSession,
+    ) -> Option<String> {
+        if json.variant.contains("12") {
+            self.live_games12.get_hand(&json.game_id, user)
+        } else {
+            self.live_games8.get_hand(&json.game_id, user)
+        }
+    }
+
+    pub fn get_confirmed(&self, json: &GameGet) -> Option<[bool; 2]> {
+        if json.variant.contains("12") {
+            self.live_games12.get_confirmed(&json.game_id)
+        } else {
+            self.live_games8.get_confirmed(&json.game_id)
+        }
+    }
+
+    pub fn buy(&self, json: &GameGet, player: &String) -> Option<LiveGameMove> {
+        if &json.variant == "12" {
+            self.live_games12.buy(json, player)
+        } else {
+            self.live_games8.buy(json, player)
+        }
+    }
+
+    // DEPLOY PART
+
+    pub fn place_move(
+        &self,
+        json: &GameGet,
+        player: &String,
+    ) -> Option<LiveGameMove> {
+        if json.variant == "12" {
+            self.live_games12.place_move(json, player)
+        } else {
+            self.live_games8.place_move(json, player)
+        }
+    }
+
+    pub fn fight_move(
+        &self,
+        json: &GameGet,
+        player: &String,
+    ) -> Option<LiveGameMove> {
+        if json.variant == "12" {
+            self.live_games12.fight_move(json, player)
+        } else {
+            self.live_games8.fight_move(json, player)
+        }
+    }
+
+    pub fn set_deploy(&self, json: &GameGet) -> Option<Value> {
+        if json.variant.contains("12") {
+            self.live_games12.set_deploy(&json.game_id)
+        } else {
+            self.live_games8.set_deploy(&json.game_id)
+        }
+    }
+
+    /// DRAW PART
+
+    pub fn draw_req(
+        &self,
+        username: &String,
+        json: &GameGet,
+    ) -> Option<(i8, [String; 2])> {
+        if json.variant.contains("12") {
+            self.live_games12.draw_req(&json.game_id, username)
+        } else {
+            self.live_games8.draw_req(&json.game_id, username)
+        }
+    }
+    pub fn get_players(&self, json: &GameGet) -> Option<[String; 2]> {
+        if json.variant == "12" {
+            self.live_games12.get_players(&json.game_id)
+        } else {
+            self.live_games8.get_players(&json.game_id)
         }
     }
 }

@@ -11,6 +11,7 @@ pub struct GameGet {
     pub game_id: String,
     #[serde(default)]
     pub game_move: String,
+    pub variant: String,
 }
 
 pub enum LiveGameMove {
