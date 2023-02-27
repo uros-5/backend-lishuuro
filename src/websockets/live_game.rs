@@ -73,7 +73,7 @@ where
     shop: Shop<S>,
     placement: P,
     fight: P,
-    game: ShuuroGame,
+    pub game: ShuuroGame,
     _b: PhantomData<B>,
     _a: PhantomData<A>,
 }
@@ -525,7 +525,7 @@ where
     for<'a> &'a B: BitOr<&'a S, Output = B>,
     for<'a> &'a B: BitAnd<&'a S, Output = B>,
 {
-    all: AllGames<S, B, A, P>,
+    pub all: AllGames<S, B, A, P>,
     unfinished: Arc<Mutex<Vec<String>>>,
 }
 
@@ -807,169 +807,5 @@ where
             all: arc2(HashMap::new()),
             unfinished: arc2(vec![]),
         }
-    }
-}
-
-type Live8 = LiveGames<
-    Square8,
-    BB8<Square8>,
-    Attacks8<Square8, BB8<Square8>>,
-    P8<Square8, BB8<Square8>>,
->;
-
-type Live12 = LiveGames<
-    Square12,
-    BB12<Square12>,
-    Attacks12<Square12, BB12<Square12>>,
-    P12<Square12, BB12<Square12>>,
->;
-
-pub struct ShuuroGames {
-    pub live_games8: Live8,
-    pub live_games12: Live12,
-}
-
-impl ShuuroGames {
-    /// Add new game to live games.
-    pub fn add_game(&self, game: ShuuroGame) -> usize {
-        send!(0, self, game, add_game, game)
-        // if game.variant == "shuuro12" {
-        //     self.live_games12.add_game(game)
-        // } else {
-        //     self.live_games8.add_game(game)
-        // }
-    }
-    /// Remove game after end.
-    pub async fn remove_game(
-        &self,
-        json: &GameGet,
-        db: &Collection<ShuuroGame>,
-    ) {
-        send!(1, self, json, remove_game, db, &json.game_id);
-    }
-
-    /// Count all games.
-    pub fn game_count(&self) -> usize {
-        let first = self.live_games8.game_count();
-        let second = self.live_games12.game_count();
-        first + second
-    }
-
-    /// Load games from db
-    /// First game is for `P8`
-    pub fn load_unfinished(&self, games: [HashMap<String, ShuuroGame>; 2]) {
-        self.live_games8.load_unfinished(&games[0]);
-        self.live_games12.load_unfinished(&games[1]);
-    }
-
-    pub fn get_unfinished(&self) -> [Vec<String>; 2] {
-        [
-            self.live_games8.get_unfinished(),
-            self.live_games12.get_unfinished(),
-        ]
-    }
-
-    pub fn delete_unfinished(&self) {
-        self.live_games8.del_unfinished();
-        self.live_games12.del_unfinished();
-    }
-
-    // SHOP PART
-
-    pub fn change_variant(&self, json: &GameGet) {
-        send!(0, self, json, change_variant, &json.game_id, &json.variant)
-    }
-    /// Get hand for active player.
-    pub fn get_hand(
-        &self,
-        json: &GameGet,
-        user: &UserSession,
-    ) -> Option<String> {
-        send!(0, self, json, get_hand, &json.game_id, user)
-    }
-
-    pub fn get_confirmed(&self, json: &GameGet) -> Option<[bool; 2]> {
-        send!(0, self, json, get_confirmed, &json.game_id)
-    }
-
-    pub fn buy(&self, json: &GameGet, player: &String) -> Option<LiveGameMove> {
-        send!(0, self, json, buy, json, player)
-    }
-
-    // DEPLOY PART
-
-    pub fn place_move(
-        &self,
-        json: &GameGet,
-        player: &String,
-    ) -> Option<LiveGameMove> {
-        send!(0, self, json, place_move, json, player)
-    }
-
-    pub fn fight_move(
-        &self,
-        json: &GameGet,
-        player: &String,
-    ) -> Option<LiveGameMove> {
-        send!(0, self, json, fight_move, json, player)
-    }
-
-    pub fn set_deploy(&self, json: &GameGet) -> Option<Value> {
-        send!(0, self, json, set_deploy, &json.game_id)
-    }
-
-    /// DRAW PART
-
-    pub fn draw_req(
-        &self,
-        json: &GameGet,
-        username: &String,
-    ) -> Option<(i8, [String; 2])> {
-        send!(0, self, json, draw_req, &json.game_id, username)
-    }
-    pub fn get_players(&self, json: &GameGet) -> Option<[String; 2]> {
-        send!(0, self, json, get_players, &json.game_id)
-    }
-
-    /// CLOCK PART
-
-    /// After every 500ms, this function returns who lost on time.
-    pub fn clock_status(
-        &self,
-        json: &GameGet,
-        time_check: &Arc<Mutex<TimeCheck>>,
-    ) -> Option<(Value, Value, [String; 2])> {
-        send!(0, self, json, clock_status, time_check)
-    }
-
-    /// Check clocks for current stage.
-    pub fn check_clocks(
-        &self,
-        json: &GameGet,
-        time_check: &Arc<Mutex<TimeCheck>>,
-    ) {
-        send!(0, self, json, check_clocks, time_check)
-    }
-
-    pub async fn get_game<'a>(
-        &self,
-        json: &GameGet,
-        db: &Collection<ShuuroGame>,
-        s: &'a MessageHandler<'a>,
-    ) -> Option<ShuuroGame> {
-        send!(1, self, json, get_game, &json.game_id, db, s)
-    }
-
-    pub fn live_sfen(&self, json: &GameGet) -> Option<(u8, String)> {
-        send!(0, self, json, live_sfen, &json.game_id)
-    }
-
-    /// Resign if this player exist in game.
-    pub fn resign(
-        &self,
-        json: &GameGet,
-        username: &String,
-    ) -> Option<[String; 2]> {
-        send!(0, self, json, resign, &json.game_id, username)
     }
 }

@@ -99,7 +99,8 @@ impl<'a> MessageHandler<'a> {
                 if &msg.id == "home" {
                     to = SendTo::Spectators(s);
                 } else {
-                    if let Some(players) = self.ws.shuuro_games.get_players(&id)
+                    if let Some(players) =
+                        self.ws.shuuro_games.get_players(&GameGet::from(msg))
                     {
                         to = SendTo::SpectatorsAndPlayers((s, players));
                     } else {
@@ -182,6 +183,7 @@ impl<'a> MessageHandler<'a> {
     }
 
     async fn accept_game_req(&self, game: GameRequest) {
+        let request = game.clone();
         let shuuro_game = self.create_game(game).await;
         let id = String::from(&shuuro_game._id);
         let id2 = String::from(&id);
@@ -191,24 +193,28 @@ impl<'a> MessageHandler<'a> {
             .send_msg(msg, SendTo::Players(shuuro_game.players.clone()));
         self.ws.players.new_spectators(&shuuro_game._id);
         let _count = self.ws.shuuro_games.add_game(shuuro_game);
-        self.ws.shuuro_games.change_variant(&id2, &variant);
+        self.ws
+            .shuuro_games
+            .change_variant(&GameGet::from((&request, &id2)));
         self.shuuro_games_count(SendTo::All);
         self.ws.chat.add_chat(&id);
-        let _lost_on_time_task = self.lost_on_time_task(id2);
+        let _lost_on_time_task =
+            self.lost_on_time_task(&GameGet::from((&request, &id2)));
         let _check_clock_task = self.check_clock_task(&id);
     }
 
-    pub fn lost_on_time_task(&self, id: String) -> JoinHandle<()> {
+    pub fn lost_on_time_task(&self, json: &GameGet) -> JoinHandle<()> {
         let mut db_rv = self.db_tx.subscribe();
         let ws2 = self.ws.clone();
         let db = self.db.mongo.games.clone();
         tokio::spawn({
+            let json = json.clone();
             let msg_sender = self.msg_sender.clone();
             async move {
                 while let Ok(msg) = db_rv.recv().await {
                     match &msg {
                         MsgDatabase::LostOnTime(b) => {
-                            ws2.shuuro_games.check_clocks(b);
+                            ws2.shuuro_games.check_clocks(&json, b);
                             let time_check = b.lock().unwrap();
                             if time_check.exist == false {
                                 break;
@@ -216,10 +222,10 @@ impl<'a> MessageHandler<'a> {
                                 let tv_spectators =
                                     ws2.players.get_spectators("tv");
                                 let match_spectators =
-                                    ws2.players.get_spectators(&id);
+                                    ws2.players.get_spectators(&json.game_id);
                                 drop(time_check);
                                 if let Some(values) =
-                                    ws2.shuuro_games.clock_status(b)
+                                    ws2.shuuro_games.clock_status(&json, b)
                                 {
                                     msg_sender.send_msg(
                                         values.0.clone(),
@@ -241,12 +247,12 @@ impl<'a> MessageHandler<'a> {
 
                                 tokio::spawn(async move {
                                     ws2.shuuro_games
-                                        .remove_game(&db.clone(), &id)
+                                        .remove_game(&json, &db.clone())
                                         .await;
                                     let count = ws2.shuuro_games.game_count();
                                     let msg = fmt_count("active_games", count);
                                     msg_sender.send_msg(msg, SendTo::All);
-                                    ws2.chat.remove_chat(&id);
+                                    ws2.chat.remove_chat(&json.game_id);
                                 });
                                 break;
                             }
@@ -292,11 +298,13 @@ impl<'a> MessageHandler<'a> {
         }
     }
 
-    pub fn _lost_on_time(&self, id: &String, values: (Value, Value)) {
-        if let Some(players) = self.ws.shuuro_games.get_players(id) {
+    pub fn _lost_on_time(&self, json: &GameGet, values: (Value, Value)) {
+        if let Some(players) = self.ws.shuuro_games.get_players(json) {
             self.msg_sender
                 .send_msg(values.0.clone(), SendTo::Players(players));
-            if let Some(spectators) = self.ws.players.get_spectators(id) {
+            if let Some(spectators) =
+                self.ws.players.get_spectators(&json.game_id)
+            {
                 self.msg_sender
                     .send_msg(values.0, SendTo::Spectators(spectators));
             }
@@ -304,15 +312,15 @@ impl<'a> MessageHandler<'a> {
         self.msg_sender.send_tv_msg(values.1, &self.ws.players);
     }
 
-    pub fn get_hand(&self, id: &String) {
-        if let Some(hand) = self.ws.shuuro_games.get_hand(id, &self.user) {
+    pub fn get_hand(&self, json: &GameGet) {
+        if let Some(hand) = self.ws.shuuro_games.get_hand(json, &self.user) {
             let msg = serde_json::json!({"t": "live_game_hand", "hand": hand});
             self.msg_sender.send_msg(msg, SendTo::Me);
         }
     }
 
-    pub fn get_confirmed(&self, id: &String) {
-        if let Some(confirmed) = self.ws.shuuro_games.get_confirmed(id) {
+    pub fn get_confirmed(&self, json: &GameGet) {
+        if let Some(confirmed) = self.ws.shuuro_games.get_confirmed(json) {
             let msg = serde_json::json!({"t": "live_game_confirmed", "confirmed": confirmed});
             self.msg_sender.send_msg(msg, SendTo::Me);
         }
@@ -320,29 +328,29 @@ impl<'a> MessageHandler<'a> {
 
     pub async fn get_game(
         &self,
-        id: &String,
+        json: &GameGet,
         username: &String,
     ) -> Option<String> {
         if let Some(game) = self
             .ws
             .shuuro_games
-            .get_game(id, &self.db.mongo.games, self)
+            .get_game(json, &self.db.mongo.games, self)
             .await
         {
-            let res = serde_json::json!({"t": "live_game_start", "game_id": id, "game_info": &game});
+            let res = serde_json::json!({"t": "live_game_start", "game_id": json, "game_info": &game});
             if !&game.players.contains(&username) {
-                self.ws.players.add_spectator(id, username);
-                self.user.watch(id);
+                self.ws.players.add_spectator(&game._id, username);
+                self.user.watch(&json.game_id);
             }
             self.msg_sender.send_msg(res, SendTo::Me);
-            return Some(String::from(id));
+            return Some(String::from(&json.game_id));
         }
         None
     }
 
     fn confirm_shop(&self, json: &GameGet, confirmed: &[bool; 2]) {
         if let Some(s) = self.ws.players.get_spectators(&json.game_id) {
-            if let Some(p) = self.ws.shuuro_games.get_players(&json.game_id) {
+            if let Some(p) = self.ws.shuuro_games.get_players(&json) {
                 let res = serde_json::json!({"t": "pause_confirmed", "confirmed": confirmed});
                 self.msg_sender
                     .send_msg(res, SendTo::SpectatorsAndPlayers((s, p)));
@@ -385,7 +393,7 @@ impl<'a> MessageHandler<'a> {
                 if fme {
                     self.ws
                         .shuuro_games
-                        .remove_game(&self.db.mongo.games, &json.game_id)
+                        .remove_game(&json, &self.db.mongo.games)
                         .await;
                     self.shuuro_games_count(SendTo::All);
                     self.ws.players.remove_spectators(&json.game_id);
@@ -419,7 +427,7 @@ impl<'a> MessageHandler<'a> {
                 if status > 0 {
                     self.ws
                         .shuuro_games
-                        .remove_game(&self.db.mongo.games, &json.game_id)
+                        .remove_game(&json, &self.db.mongo.games)
                         .await;
                     self.shuuro_games_count(SendTo::All);
                     self.ws.players.remove_spectators(&json.game_id);
@@ -441,11 +449,10 @@ impl<'a> MessageHandler<'a> {
 
     fn set_deploy(&self, json: &GameGet, confirmed: [bool; 2]) {
         if !confirmed.contains(&false) {
-            if let Some(res) = self.ws.shuuro_games.set_deploy(&json.game_id) {
+            if let Some(res) = self.ws.shuuro_games.set_deploy(&json) {
                 self.msg_sender.send_tv_msg(res.clone(), &self.ws.players);
                 let s = self.ws.players.get_spectators(&json.game_id).unwrap();
-                let p =
-                    self.ws.shuuro_games.get_players(&json.game_id).unwrap();
+                let p = self.ws.shuuro_games.get_players(&json).unwrap();
                 self.msg_sender
                     .send_msg(res, SendTo::SpectatorsAndPlayers((s, p)));
             }
@@ -504,8 +511,8 @@ impl<'a> MessageHandler<'a> {
 
     // DRAW PART
 
-    pub async fn draw_req(&self, id: &String, username: &String) {
-        let draw = self.ws.shuuro_games.draw_req(id, username);
+    pub async fn draw_req(&self, json: &GameGet, username: &String) {
+        let draw = self.ws.shuuro_games.draw_req(json, username);
         if let Some(draw) = draw {
             let d = {
                 if draw.0 == 5 {
@@ -516,9 +523,9 @@ impl<'a> MessageHandler<'a> {
             };
 
             if draw.0 == 5 {
-                let res = serde_json::json!({"t": "live_game_draw", "draw": d, "game_id": &id});
+                let res = serde_json::json!({"t": "live_game_draw", "draw": d, "game_id": &json});
                 self.msg_sender.send_tv_msg(res.clone(), &self.ws.players);
-                if let Some(s) = self.ws.players.get_spectators(id) {
+                if let Some(s) = self.ws.players.get_spectators(&json.game_id) {
                     self.msg_sender.send_msg(
                         res,
                         SendTo::SpectatorsAndPlayers((s, draw.1)),
@@ -528,12 +535,12 @@ impl<'a> MessageHandler<'a> {
                 }
                 self.ws
                     .shuuro_games
-                    .remove_game(&self.db.mongo.games, id)
+                    .remove_game(json, &self.db.mongo.games)
                     .await;
                 self.shuuro_games_count(SendTo::All);
             } else {
                 let res = serde_json::json!({"t": "live_game_draw", "draw": d, "player": &username});
-                if let Some(s) = self.ws.players.get_spectators(id) {
+                if let Some(s) = self.ws.players.get_spectators(&json.game_id) {
                     self.msg_sender.send_msg(
                         res,
                         SendTo::SpectatorsAndPlayers((s, draw.1)),
@@ -544,16 +551,16 @@ impl<'a> MessageHandler<'a> {
             }
         }
     }
-    pub async fn resign(&self, id: &String, username: &String) {
-        if let Some(players) = self.ws.shuuro_games.resign(id, username) {
+    pub async fn resign(&self, json: &GameGet, username: &String) {
+        if let Some(players) = self.ws.shuuro_games.resign(json, username) {
             let res = serde_json::json!({
                 "t": "live_game_resign",
                 "resign": true,
                 "player": username,
-                "game_id": id
+                "game_id": json
             });
             self.msg_sender.send_tv_msg(res.clone(), &self.ws.players);
-            if let Some(s) = self.ws.players.get_spectators(id) {
+            if let Some(s) = self.ws.players.get_spectators(&json.game_id) {
                 self.msg_sender
                     .send_msg(res, SendTo::SpectatorsAndPlayers((s, players)));
             } else {
@@ -561,7 +568,7 @@ impl<'a> MessageHandler<'a> {
             }
             self.ws
                 .shuuro_games
-                .remove_game(&self.db.mongo.games, id)
+                .remove_game(json, &self.db.mongo.games)
                 .await;
             self.shuuro_games_count(SendTo::All);
         }
@@ -576,7 +583,7 @@ impl<'a> MessageHandler<'a> {
     }
 
     pub fn get_sfen(&self, json: &GameGet) {
-        if let Some(g) = self.ws.shuuro_games.live_sfen(&json.game_id) {
+        if let Some(g) = self.ws.shuuro_games.live_sfen(&json) {
             let res = serde_json::json!({
                 "t": "live_game_sfen",
                 "game_id": &json.game_id,
@@ -604,11 +611,15 @@ impl<'a> MessageHandler<'a> {
             if unfinished.len() == 0 {
                 return;
             }
-            for id in unfinished {
-                let _lost_on_time = self.lost_on_time_task(String::from(&id));
-                let _check_clock = self.check_clock_task(&id);
+            let variants = ["shuuro", "standard"];
+            for (i, v) in unfinished.iter().enumerate() {
+                for id in v {
+                    let json = GameGet::new(&id, &String::from(variants[i]));
+                    let _lost_on_time = self.lost_on_time_task(&json);
+                    let _check_clock = self.check_clock_task(&id);
+                }
             }
-            self.ws.shuuro_games.del_unfinished();
+            self.ws.shuuro_games.delete_unfinished();
         }
     }
 }

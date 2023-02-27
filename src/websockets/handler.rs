@@ -160,23 +160,20 @@ async fn websocket(
                                     if let Ok(m) =
                                         serde_json::from_str::<GameGet>(&text)
                                     {
-                                        handler.get_hand(&m.game_id);
+                                        handler.get_hand(&m);
                                     }
                                 } else if t == "live_game_confirmed" {
                                     if let Ok(m) =
                                         serde_json::from_str::<GameGet>(&text)
                                     {
-                                        handler.get_confirmed(&m.game_id);
+                                        handler.get_confirmed(&m);
                                     }
                                 } else if t == "live_game_start" {
                                     if let Ok(g) =
                                         serde_json::from_str::<GameGet>(&text)
                                     {
                                         handler
-                                            .get_game(
-                                                &g.game_id,
-                                                &user.username,
-                                            )
+                                            .get_game(&g, &user.username)
                                             .await;
                                     }
                                 } else if t == "live_game_buy"
@@ -204,10 +201,7 @@ async fn websocket(
                                         serde_json::from_str::<GameGet>(&text)
                                     {
                                         handler
-                                            .draw_req(
-                                                &g.game_id,
-                                                &user.username,
-                                            )
+                                            .draw_req(&g, &user.username)
                                             .await;
                                     }
                                 } else if t == "live_game_resign" {
@@ -215,7 +209,7 @@ async fn websocket(
                                         serde_json::from_str::<GameGet>(&text)
                                     {
                                         handler
-                                            .resign(&g.game_id, &user.username)
+                                            .resign(&g, &user.username)
                                             .await;
                                     }
                                 } else if t == "live_game_sfen" {

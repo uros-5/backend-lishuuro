@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 
-use super::time_control::TimeCheck;
+use super::{rooms::ChatMsg, time_control::TimeCheck};
 
 /// This struct is used for most game moves.
 #[derive(Clone, Serialize, Deserialize)]
@@ -25,4 +25,26 @@ pub enum LiveGameMove {
 pub enum MsgDatabase {
     GetGame(String),
     LostOnTime(Arc<Mutex<TimeCheck>>),
+}
+
+impl From<&mut ChatMsg> for GameGet {
+    fn from(value: &mut ChatMsg) -> Self {
+        GameGet {
+            t: String::from(""),
+            game_id: String::from(&value.id),
+            game_move: String::from(""),
+            variant: String::from(&value.variant),
+        }
+    }
+}
+
+impl GameGet {
+    pub fn new(id: &String, variant: &String) -> Self {
+        Self {
+            t: String::from(""),
+            game_id: String::from(id),
+            game_move: String::from(""),
+            variant: String::from(variant),
+        }
+    }
 }
