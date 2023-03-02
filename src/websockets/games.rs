@@ -1,19 +1,12 @@
 use std::{
     collections::HashMap,
-    hash::Hash,
-    marker::PhantomData,
-    ops::{BitAnd, BitOr, BitOrAssign, Not},
-    sync::{Arc, Mutex, MutexGuard},
+    sync::{Arc, Mutex},
 };
 
-use bson::DateTime as DT;
-use chrono::Utc;
 use mongodb::Collection;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use shuuro::{
-    attacks::Attacks,
-    bitboard::BitBoard,
-    position::{Board, Outcome, Position, Sfen},
     shuuro12::{
         attacks12::Attacks12, bitboard12::BB12, position12::P12,
         square12::Square12,
@@ -21,20 +14,13 @@ use shuuro::{
     shuuro8::{
         attacks8::Attacks8, bitboard8::BB8, position8::P8, square8::Square8,
     },
-    Color, Move, MoveError, MoveRecord, Piece, PieceType, SfenError, Shop,
-    Square, Variant,
 };
 
-use crate::{
-    arc2,
-    database::{
-        mongo::ShuuroGame, queries::update_entire_game, redis::UserSession,
-    },
-};
+use crate::database::{mongo::ShuuroGame, redis::UserSession};
 
 use super::{
     live_game::LiveGames, time_control::TimeCheck, GameGet, LiveGameMove,
-    MessageHandler, MsgDatabase,
+    MessageHandler,
 };
 
 macro_rules! send {
@@ -69,6 +55,7 @@ type Live12 = LiveGames<
     P12<Square12, BB12<Square12>>,
 >;
 
+#[derive(Default)]
 pub struct ShuuroGames {
     pub live_games8: Live8,
     pub live_games12: Live12,
@@ -98,12 +85,12 @@ impl ShuuroGames {
     /// Load games from db
     /// First game is for `P8`
     pub fn load_unfinished(&self, games: Vec<HashMap<String, ShuuroGame>>) {
-        let variants = ["shuuro", "standard"]; //, "shuuroFairy", "standardFairy"];
+        // let variants = ["shuuro", "standard"]; //, "shuuroFairy", "standardFairy"];
         for (i, g) in games.iter().enumerate() {
             if i == 0 {
-                self.live_games8.load_unfinished(&g);
+                self.live_games8.load_unfinished(g);
             } else {
-                self.live_games12.load_unfinished(&g);
+                self.live_games12.load_unfinished(g);
             }
         }
     }
@@ -203,7 +190,20 @@ impl ShuuroGames {
         db: &Collection<ShuuroGame>,
         s: &'a MessageHandler<'a>,
     ) -> Option<ShuuroGame> {
-        send!(1, self, json, get_game, &json.game_id, db, s)
+        let mut json = json.clone();
+        // json.variant
+        if let Some(game) =
+            send!(1, self, json, get_game, &json.game_id, db, s, false)
+        {
+            return Some(game);
+        }
+        json.variant = String::from("standard");
+        if let Some(game) =
+            send!(1, self, json, get_game, &json.game_id, db, s, false)
+        {
+            return Some(game);
+        }
+        send!(1, self, json, get_game, &json.game_id, db, s, true)
     }
 
     pub fn live_sfen(&self, json: &GameGet) -> Option<(u8, String)> {
@@ -218,13 +218,52 @@ impl ShuuroGames {
     ) -> Option<[String; 2]> {
         send!(0, self, json, resign, &json.game_id, username)
     }
+
+    pub async fn save_on_exit(&self, games: &Collection<ShuuroGame>) {
+        self.live_games8.save_on_exit(games).await;
+        self.live_games12.save_on_exit(games).await;
+    }
+
+    pub fn get_tv(&self) -> Vec<TvGame> {
+        let c = 0;
+        let mut games = vec![];
+        let all = self.live_games12.all.lock().unwrap();
+        for i in all.iter() {
+            if c == 20 {
+                break;
+            }
+            let f = &i.1.game.sfen;
+            if f.is_empty() {
+                continue;
+            }
+            let id = &i.1.game._id;
+            let w = &i.1.game.players[0];
+            let b = &i.1.game.players[1];
+            let t = "live_tv";
+            let tv = TvGame::new(t, id, w, b, f);
+            games.push(tv);
+        }
+        games
+    }
 }
 
-impl Default for ShuuroGames {
-    fn default() -> Self {
+#[derive(Clone, Serialize, Deserialize)]
+pub struct TvGame {
+    pub t: String,
+    pub game_id: String,
+    pub w: String,
+    pub b: String,
+    pub sfen: String,
+}
+
+impl TvGame {
+    pub fn new(t: &str, game_id: &str, w: &str, b: &str, fen: &str) -> Self {
         Self {
-            live_games8: Live8::default(),
-            live_games12: Live12::default(),
+            t: String::from(t),
+            game_id: String::from(game_id),
+            w: String::from(w),
+            b: String::from(b),
+            sfen: String::from(fen),
         }
     }
 }

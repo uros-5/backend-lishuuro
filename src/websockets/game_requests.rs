@@ -11,7 +11,8 @@ use crate::arc2;
 
 use super::GameGet;
 
-pub const VARIANTS: [&str; 2] = ["shuuro12", "shuuroFairy"];
+pub const VARIANTS: [&str; 4] =
+    ["shuuro", "shuuroFairy", "standard", "standardFairy"];
 pub const DURATION_RANGE: [i64; 28] = [
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 25,
     30, 35, 40, 45, 60, 75, 90,

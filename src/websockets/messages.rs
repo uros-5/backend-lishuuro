@@ -187,7 +187,7 @@ impl<'a> MessageHandler<'a> {
         let shuuro_game = self.create_game(game).await;
         let id = String::from(&shuuro_game._id);
         let id2 = String::from(&id);
-        let variant = String::from(&shuuro_game.variant);
+        let _variant = String::from(&shuuro_game.variant);
         let msg = add_game_to_db(&self.db.mongo.games, &shuuro_game).await;
         self.msg_sender
             .send_msg(msg, SendTo::Players(shuuro_game.players.clone()));
@@ -337,7 +337,7 @@ impl<'a> MessageHandler<'a> {
             .get_game(json, &self.db.mongo.games, self)
             .await
         {
-            let res = serde_json::json!({"t": "live_game_start", "game_id": json, "game_info": &game});
+            let res = serde_json::json!({"t": "live_game_start", "game_id": &json.game_id, "game_info": &game});
             if !&game.players.contains(&username) {
                 self.ws.players.add_spectator(&game._id, username);
                 self.user.watch(&json.game_id);
@@ -588,7 +588,8 @@ impl<'a> MessageHandler<'a> {
                 "t": "live_game_sfen",
                 "game_id": &json.game_id,
                 "fen": g.1,
-                "current_stage": g.0
+                "current_stage": g.0,
+                "variant": &json.variant
             });
             self.msg_sender.send_msg(res, SendTo::Me);
         }

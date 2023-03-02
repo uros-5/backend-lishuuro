@@ -13,16 +13,8 @@ use serde_json::Value;
 use shuuro::{
     attacks::Attacks,
     bitboard::BitBoard,
-    position::{Board, Outcome, Position, Sfen},
-    shuuro12::{
-        attacks12::Attacks12, bitboard12::BB12, position12::P12,
-        square12::Square12,
-    },
-    shuuro8::{
-        attacks8::Attacks8, bitboard8::BB8, position8::P8, square8::Square8,
-    },
-    Color, Move, MoveError, MoveRecord, Piece, PieceType, SfenError, Shop,
-    Square, Variant,
+    position::{Outcome, Position},
+    Color, Move, Piece, PieceType, Shop, Square, Variant,
 };
 
 use crate::{
@@ -36,24 +28,6 @@ use super::{
     time_control::TimeCheck, GameGet, LiveGameMove, MessageHandler,
     MsgDatabase, TvGame,
 };
-
-macro_rules! send {
-    (0, $self: ident, $json: expr, $method: ident, $($params:expr),*) => {
-        if $json.variant.contains("12") {
-            $self.live_games12.$method($($params),*)
-        } else {
-            $self.live_games8.$method($($params),*)
-        }
-    };
-
-    (1, $self: ident, $json: expr, $method: ident, $($params:expr),*) => {
-        if $json.variant.contains("12") {
-            $self.live_games12.$method($($params),*).await
-        } else {
-            $self.live_games8.$method($($params),*).await
-        }
-    };
-}
 
 #[derive(Debug, Clone)]
 pub struct LiveGame<S, B, A, P>
@@ -115,7 +89,6 @@ where
 
     /// Get hand for active player.
     pub fn get_hand(&self, index: usize) -> String {
-        let c = self.placement.clone();
         let color = Color::from(index);
         self.shop.to_sfen(color)
     }
@@ -294,7 +267,7 @@ where
         self.game.tc.update_stage(2);
         self.game.last_clock = DT::now();
         let sfen = self.placement.generate_sfen();
-        let outcome = self.fight.set_sfen(&sfen.as_str());
+        let outcome = self.fight.set_sfen(sfen.as_str());
         if let Ok(_o) = outcome {
             self.update_status();
         }
@@ -726,14 +699,16 @@ where
         id: &String,
         _db: &Collection<ShuuroGame>,
         s: &'a MessageHandler<'a>,
+        db: bool,
     ) -> Option<ShuuroGame> {
         let id = String::from(id);
         let all = self.all.lock().unwrap();
         if let Some(g) = all.get(&id) {
             return Some(g.game.clone());
         }
-        let _ = s.db_tx.clone().send(MsgDatabase::GetGame(id));
-
+        if db {
+            let _ = s.db_tx.clone().send(MsgDatabase::GetGame(id));
+        }
         None
     }
 
@@ -765,7 +740,7 @@ where
                 break;
             }
             let f = &i.1.game.sfen;
-            if f == "" {
+            if f.is_empty() {
                 continue;
             }
             let id = &i.1.game._id;

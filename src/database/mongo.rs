@@ -2,10 +2,6 @@ use async_session::chrono::Duration;
 use bson::DateTime;
 use mongodb::{options::ClientOptions, Client, Collection};
 use serde::{Deserialize, Serialize};
-use shuuro::shuuro12::bitboard12::BB12;
-use shuuro::shuuro12::position12::P12;
-use shuuro::shuuro12::square12::Square12;
-use shuuro::Shop;
 
 use crate::websockets::{time_control::TimeControl, GameRequest};
 
@@ -88,13 +84,6 @@ pub struct ShuuroGame {
     pub credits: [u16; 2],
     pub hands: [String; 2],
     pub sfen: String,
-    #[serde(skip_serializing)]
-    #[serde(skip_deserializing)]
-    pub shuuro: (
-        Shop<Square12>,
-        P12<Square12, BB12<Square12>>,
-        P12<Square12, BB12<Square12>>,
-    ),
     pub history: History,
     pub tc: TimeControl,
     #[serde(skip_serializing)]
@@ -120,7 +109,6 @@ impl From<(&GameRequest, &[String; 2], &str)> for ShuuroGame {
             credits: [800, 800],
             hands: [String::from(""), String::from("")],
             sfen: String::from(""),
-            shuuro: (Shop::default(), P12::default(), P12::default()),
             history: (vec![], vec![], vec![]),
             tc: TimeControl::new(f.0.time, f.0.incr),
             draws: [false, false],

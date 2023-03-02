@@ -2,15 +2,12 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use json_value_merge::Merge;
-use redis::Msg;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::arc2;
 use crate::database::mongo::ShuuroGame;
 use crate::database::redis::UserSession;
-
-use super::GameGet;
 
 /// Struct containing active players and spectators
 pub struct Players {
@@ -119,7 +116,7 @@ impl ChatMsg {
             time: bson::DateTime::now().to_string(),
             message,
             id,
-            variant: String::from("shuuro12"),
+            variant: String::from("shuuro"),
         }
     }
 
