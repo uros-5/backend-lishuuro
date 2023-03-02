@@ -181,7 +181,7 @@ impl ShuuroGames {
         json: &GameGet,
         time_check: &Arc<Mutex<TimeCheck>>,
     ) {
-        send!(0, self, json, check_clocks, time_check)
+        send!(0, self, json, check_clocks, time_check);
     }
 
     pub async fn get_game<'a>(

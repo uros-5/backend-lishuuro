@@ -114,118 +114,105 @@ async fn websocket(
                 Message::Text(text) => {
                     if let Ok(value) = serde_json::from_str::<Value>(&text) {
                         let data_type = &value["t"];
-                        match data_type {
-                            serde_json::Value::String(t) => {
-                                if t == "live_chat_message" {
-                                    if let Ok(mut m) =
-                                        serde_json::from_str::<ChatMsg>(&text)
-                                    {
-                                        handler.new_chat_msg(&mut m);
-                                    }
-                                } else if t == "live_chat_full" {
-                                    if let Ok(m) =
-                                        serde_json::from_str::<GameGet>(&text)
-                                    {
-                                        handler.get_chat(m.game_id);
-                                    }
-                                } else if t == "active_players_full" {
-                                    handler.get_players();
-                                } else if t == "active_players_count" {
-                                    handler.get_players_count();
-                                } else if t == "live_game_remove_spectator" {
-                                    if let Ok(m) =
-                                        serde_json::from_str::<GameGet>(&text)
-                                    {
-                                        handler.remove_spectator(&m.game_id);
-                                    }
-                                } else if t == "home_lobby_add" {
-                                    if let Ok(g) =
-                                        serde_json::from_str::<GameRequest>(
-                                            &text,
-                                        )
-                                    {
-                                        handler.add_game_req(g);
-                                    }
-                                } else if t == "home_lobby_full" {
-                                    handler.get_all_game_reqs();
-                                } else if t == "home_lobby_accept" {
-                                    if let Ok(g) =
-                                        serde_json::from_str::<GameRequest>(
-                                            &text,
-                                        )
-                                    {
-                                        handler.check_game_req(g).await;
-                                    }
-                                } else if t == "live_game_hand" {
-                                    if let Ok(m) =
-                                        serde_json::from_str::<GameGet>(&text)
-                                    {
-                                        handler.get_hand(&m);
-                                    }
-                                } else if t == "live_game_confirmed" {
-                                    if let Ok(m) =
-                                        serde_json::from_str::<GameGet>(&text)
-                                    {
-                                        handler.get_confirmed(&m);
-                                    }
-                                } else if t == "live_game_start" {
-                                    if let Ok(g) =
-                                        serde_json::from_str::<GameGet>(&text)
-                                    {
-                                        handler
-                                            .get_game(&g, &user.username)
-                                            .await;
-                                    }
-                                } else if t == "live_game_buy"
-                                    || t == "live_game_confirm"
+                        if let serde_json::Value::String(t) = data_type {
+                            if t == "live_chat_message" {
+                                if let Ok(mut m) =
+                                    serde_json::from_str::<ChatMsg>(&text)
                                 {
-                                    if let Ok(g) =
-                                        serde_json::from_str::<GameGet>(&text)
-                                    {
-                                        handler.shop_move(g);
-                                    }
-                                } else if t == "live_game_place" {
-                                    if let Ok(g) =
-                                        serde_json::from_str::<GameGet>(&text)
-                                    {
-                                        handler.place_move(g).await;
-                                    }
-                                } else if t == "live_game_play" {
-                                    if let Ok(g) =
-                                        serde_json::from_str::<GameGet>(&text)
-                                    {
-                                        handler.fight_move(g).await;
-                                    }
-                                } else if t == "live_game_draw" {
-                                    if let Ok(g) =
-                                        serde_json::from_str::<GameGet>(&text)
-                                    {
-                                        handler
-                                            .draw_req(&g, &user.username)
-                                            .await;
-                                    }
-                                } else if t == "live_game_resign" {
-                                    if let Ok(g) =
-                                        serde_json::from_str::<GameGet>(&text)
-                                    {
-                                        handler
-                                            .resign(&g, &user.username)
-                                            .await;
-                                    }
-                                } else if t == "live_game_sfen" {
-                                    if let Ok(json) =
-                                        serde_json::from_str::<GameGet>(&text)
-                                    {
-                                        handler.get_sfen(&json);
-                                    }
-                                } else if t == "live_tv" {
-                                    handler.get_tv();
-                                } else if t == "save_all" {
-                                    handler.save_all().await;
-                                } else {
+                                    handler.new_chat_msg(&mut m);
                                 }
+                            } else if t == "live_chat_full" {
+                                if let Ok(m) =
+                                    serde_json::from_str::<GameGet>(&text)
+                                {
+                                    handler.get_chat(m.game_id);
+                                }
+                            } else if t == "active_players_full" {
+                                handler.get_players();
+                            } else if t == "active_players_count" {
+                                handler.get_players_count();
+                            } else if t == "live_game_remove_spectator" {
+                                if let Ok(m) =
+                                    serde_json::from_str::<GameGet>(&text)
+                                {
+                                    handler.remove_spectator(&m.game_id);
+                                }
+                            } else if t == "home_lobby_add" {
+                                if let Ok(g) =
+                                    serde_json::from_str::<GameRequest>(&text)
+                                {
+                                    handler.add_game_req(g);
+                                }
+                            } else if t == "home_lobby_full" {
+                                handler.get_all_game_reqs();
+                            } else if t == "home_lobby_accept" {
+                                if let Ok(g) =
+                                    serde_json::from_str::<GameRequest>(&text)
+                                {
+                                    handler.check_game_req(g).await;
+                                }
+                            } else if t == "live_game_hand" {
+                                if let Ok(m) =
+                                    serde_json::from_str::<GameGet>(&text)
+                                {
+                                    handler.get_hand(&m);
+                                }
+                            } else if t == "live_game_confirmed" {
+                                if let Ok(m) =
+                                    serde_json::from_str::<GameGet>(&text)
+                                {
+                                    handler.get_confirmed(&m);
+                                }
+                            } else if t == "live_game_start" {
+                                if let Ok(g) =
+                                    serde_json::from_str::<GameGet>(&text)
+                                {
+                                    handler.get_game(&g, &user.username).await;
+                                }
+                            } else if t == "live_game_buy"
+                                || t == "live_game_confirm"
+                            {
+                                if let Ok(g) =
+                                    serde_json::from_str::<GameGet>(&text)
+                                {
+                                    handler.shop_move(g);
+                                }
+                            } else if t == "live_game_place" {
+                                if let Ok(g) =
+                                    serde_json::from_str::<GameGet>(&text)
+                                {
+                                    handler.place_move(g).await;
+                                }
+                            } else if t == "live_game_play" {
+                                if let Ok(g) =
+                                    serde_json::from_str::<GameGet>(&text)
+                                {
+                                    handler.fight_move(g).await;
+                                }
+                            } else if t == "live_game_draw" {
+                                if let Ok(g) =
+                                    serde_json::from_str::<GameGet>(&text)
+                                {
+                                    handler.draw_req(&g, &user.username).await;
+                                }
+                            } else if t == "live_game_resign" {
+                                if let Ok(g) =
+                                    serde_json::from_str::<GameGet>(&text)
+                                {
+                                    handler.resign(&g, &user.username).await;
+                                }
+                            } else if t == "live_game_sfen" {
+                                if let Ok(json) =
+                                    serde_json::from_str::<GameGet>(&text)
+                                {
+                                    handler.get_sfen(&json);
+                                }
+                            } else if t == "live_tv" {
+                                handler.get_tv();
+                            } else if t == "save_all" {
+                                handler.save_all().await;
+                            } else {
                             }
-                            _ => (),
                         }
                     }
                 }
@@ -241,19 +228,12 @@ async fn websocket(
 
     let db_send_task = tokio::spawn(async move {
         while let Ok(msg) = db_rx.recv().await {
-            match &msg {
-                MsgDatabase::GetGame(id) => {
-                    if let Some(game) = get_game_db(&db2.mongo.games, id).await
-                    {
-                        let msg = serde_json::json!({"t": "live_game_start", "game_id": id, "game_info": &game});
-                        let _ = tx2.send(ClientMessage::new(
-                            &user2,
-                            msg,
-                            SendTo::Me,
-                        ));
-                    }
+            if let MsgDatabase::GetGame(id) = &msg {
+                if let Some(game) = get_game_db(&db2.mongo.games, id).await {
+                    let msg = serde_json::json!({"t": "live_game_start", "game_id": id, "game_info": &game});
+                    let _ =
+                        tx2.send(ClientMessage::new(&user2, msg, SendTo::Me));
                 }
-                _ => (),
             }
         }
     });

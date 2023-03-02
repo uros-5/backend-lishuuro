@@ -224,14 +224,16 @@ where
         index: usize,
         clocks: [u64; 2],
     ) -> Option<LiveGameMove> {
-        match Move::from_sfen(json.game_move.as_str()) {
-            Some(gm) => {
-                if let Move::Put { to, piece } = gm {
+        #[allow(clippy::collapsible_match)]
+        #[allow(clippy::single_match)]
+        if let Some(gm) = Move::from_sfen(json.game_move.as_str()) {
+            match gm {
+                Move::Put { to, piece } => {
                     if Color::from(index) == piece.color {
                         if let Some(s) = self.placement.place(piece, to) {
                             self.game.draws = [false, false];
                             let mut fme = false;
-                            let m = s.split("_").next().unwrap().to_string();
+                            let m = s.split('_').next().unwrap().to_string();
                             let tf = self.is_deployment_over();
                             if tf {
                                 fme = self.set_fight();
@@ -253,8 +255,8 @@ where
                     } else {
                     }
                 }
+                _ => (),
             }
-            _ => (),
         }
         None
     }
@@ -406,15 +408,19 @@ where
                 self.game.tc.current_duration(1),
             ];
             let confirmed = self.confirmed();
+            // both have probably lost
             if durations == [None, None] {
                 if confirmed == [false, false] {
+                    // both lost
                     time_check.both_lost();
-                } else if let Some(confirmed) =
+                } else if let Some(not_confirmed) =
+                    // not confirmed player lost
                     confirmed.iter().position(|i| i == &false)
                 {
-                    time_check.lost(confirmed);
+                    time_check.lost(not_confirmed);
                 }
             } else if let Some(index) =
+                // one of players lost
                 durations.iter().position(|p| p.is_none())
             {
                 time_check.lost(index);
@@ -425,7 +431,7 @@ where
                 time_check.lost(stm as usize);
             }
         }
-        time_check.dont_exist();
+        drop(time_check);
     }
 
     /// After match is finished, update status.

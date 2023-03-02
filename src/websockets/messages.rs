@@ -56,7 +56,7 @@ fn fmt_chat(id: &String, chat: Vec<ChatMsg>) -> Value {
 }
 
 fn fmt_count(id: &str, cnt: usize) -> Value {
-    let id = format!("{}_count", id);
+    let id = format!("{id}_count");
     serde_json::json!({"t": id, "cnt": cnt })
 }
 
@@ -93,19 +93,17 @@ impl<'a> MessageHandler<'a> {
 
     pub fn new_chat_msg(&self, msg: &mut ChatMsg) {
         let id = String::from(&msg.id);
-        if let Some(v) = self.ws.chat.add_msg(&id, msg, &self.user) {
+        if let Some(v) = self.ws.chat.add_msg(&id, msg, self.user) {
             if let Some(s) = self.ws.players.get_spectators(&msg.id) {
                 let to: SendTo;
                 if &msg.id == "home" {
                     to = SendTo::Spectators(s);
+                } else if let Some(players) =
+                    self.ws.shuuro_games.get_players(&GameGet::from(msg))
+                {
+                    to = SendTo::SpectatorsAndPlayers((s, players));
                 } else {
-                    if let Some(players) =
-                        self.ws.shuuro_games.get_players(&GameGet::from(msg))
-                    {
-                        to = SendTo::SpectatorsAndPlayers((s, players));
-                    } else {
-                        to = SendTo::Spectators(s);
-                    }
+                    to = SendTo::Spectators(s);
                 }
                 self.msg_sender.send_msg(v, to);
             }
@@ -137,7 +135,7 @@ impl<'a> MessageHandler<'a> {
             self.ws.players.remove_spectator(id, &self.user.username)
         {
             let res = fmt_count("live_game_remove_spectator", count);
-            if let Some(s) = self.ws.players.get_spectators(&id) {
+            if let Some(s) = self.ws.players.get_spectators(id) {
                 let to = SendTo::Spectators(s);
                 self.msg_sender.send_msg(res, to);
             }
@@ -149,7 +147,7 @@ impl<'a> MessageHandler<'a> {
             self.ws.players.add_spectator(id, &self.user.username)
         {
             let res = fmt_count("live_game_add_spectator", count);
-            if let Some(s) = self.ws.players.get_spectators(&id) {
+            if let Some(s) = self.ws.players.get_spectators(id) {
                 let to = SendTo::Spectators(s);
                 self.msg_sender.send_msg(res, to);
             }
@@ -212,52 +210,47 @@ impl<'a> MessageHandler<'a> {
             let msg_sender = self.msg_sender.clone();
             async move {
                 while let Ok(msg) = db_rv.recv().await {
-                    match &msg {
-                        MsgDatabase::LostOnTime(b) => {
-                            ws2.shuuro_games.check_clocks(&json, b);
-                            let time_check = b.lock().unwrap();
-                            if time_check.exist == false {
-                                break;
-                            } else if time_check.finished {
-                                let tv_spectators =
-                                    ws2.players.get_spectators("tv");
-                                let match_spectators =
-                                    ws2.players.get_spectators(&json.game_id);
-                                drop(time_check);
-                                if let Some(values) =
-                                    ws2.shuuro_games.clock_status(&json, b)
-                                {
+                    if let MsgDatabase::LostOnTime(b) = &msg {
+                        ws2.shuuro_games.check_clocks(&json, b);
+                        let time_check = b.lock().unwrap();
+                        if !time_check.exist {
+                            break;
+                        } else if time_check.finished {
+                            let tv_spectators =
+                                ws2.players.get_spectators("tv");
+                            let match_spectators =
+                                ws2.players.get_spectators(&json.game_id);
+                            drop(time_check);
+                            if let Some(values) =
+                                ws2.shuuro_games.clock_status(&json, b)
+                            {
+                                msg_sender.send_msg(
+                                    values.0.clone(),
+                                    SendTo::Players(values.2),
+                                );
+                                if let Some(s) = match_spectators {
                                     msg_sender.send_msg(
-                                        values.0.clone(),
-                                        SendTo::Players(values.2),
-                                    );
-                                    if let Some(s) = match_spectators {
-                                        msg_sender.send_msg(
-                                            values.0,
-                                            SendTo::Spectators(s),
-                                        );
-                                    }
-                                    msg_sender.send_msg(
-                                        values.1,
-                                        SendTo::Spectators(
-                                            tv_spectators.unwrap(),
-                                        ),
+                                        values.0,
+                                        SendTo::Spectators(s),
                                     );
                                 }
-
-                                tokio::spawn(async move {
-                                    ws2.shuuro_games
-                                        .remove_game(&json, &db.clone())
-                                        .await;
-                                    let count = ws2.shuuro_games.game_count();
-                                    let msg = fmt_count("active_games", count);
-                                    msg_sender.send_msg(msg, SendTo::All);
-                                    ws2.chat.remove_chat(&json.game_id);
-                                });
-                                break;
+                                msg_sender.send_msg(
+                                    values.1,
+                                    SendTo::Spectators(tv_spectators.unwrap()),
+                                );
                             }
+
+                            tokio::spawn(async move {
+                                ws2.shuuro_games
+                                    .remove_game(&json, &db.clone())
+                                    .await;
+                                let count = ws2.shuuro_games.game_count();
+                                let msg = fmt_count("active_games", count);
+                                msg_sender.send_msg(msg, SendTo::All);
+                                ws2.chat.remove_chat(&json.game_id);
+                            });
+                            break;
                         }
-                        _ => (),
                     }
                 }
             }
@@ -272,15 +265,11 @@ impl<'a> MessageHandler<'a> {
             loop {
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                 let t = a.lock().unwrap();
-                if &t.finished == &true
-                    || &t.both_lost == &true
-                    || &t.exist == &false
-                {
+                if t.finished || t.both_lost || !t.exist {
                     //self2.lost_on_time(&id2, values);
                     break;
                 }
-
-                if let Ok(_) = db_tx.send(MsgDatabase::LostOnTime(a.clone())) {}
+                if db_tx.send(MsgDatabase::LostOnTime(a.clone())).is_ok() {}
             }
         })
     }
@@ -289,7 +278,7 @@ impl<'a> MessageHandler<'a> {
         if !*self.adding.lock().unwrap() {
             return;
         }
-        if &game.username() == &self.user.username {
+        if game.username() == self.user.username {
             self.remove_game_req(&game.username);
         } else {
             self.remove_game_req(&game.username);
@@ -313,7 +302,7 @@ impl<'a> MessageHandler<'a> {
     }
 
     pub fn get_hand(&self, json: &GameGet) {
-        if let Some(hand) = self.ws.shuuro_games.get_hand(json, &self.user) {
+        if let Some(hand) = self.ws.shuuro_games.get_hand(json, self.user) {
             let msg = serde_json::json!({"t": "live_game_hand", "hand": hand});
             self.msg_sender.send_msg(msg, SendTo::Me);
         }
@@ -338,7 +327,7 @@ impl<'a> MessageHandler<'a> {
             .await
         {
             let res = serde_json::json!({"t": "live_game_start", "game_id": &json.game_id, "game_info": &game});
-            if !&game.players.contains(&username) {
+            if !&game.players.contains(username) {
                 self.ws.players.add_spectator(&game._id, username);
                 self.user.watch(&json.game_id);
             }
@@ -350,7 +339,7 @@ impl<'a> MessageHandler<'a> {
 
     fn confirm_shop(&self, json: &GameGet, confirmed: &[bool; 2]) {
         if let Some(s) = self.ws.players.get_spectators(&json.game_id) {
-            if let Some(p) = self.ws.shuuro_games.get_players(&json) {
+            if let Some(p) = self.ws.shuuro_games.get_players(json) {
                 let res = serde_json::json!({"t": "pause_confirmed", "confirmed": confirmed});
                 self.msg_sender
                     .send_msg(res, SendTo::SpectatorsAndPlayers((s, p)));
@@ -359,27 +348,26 @@ impl<'a> MessageHandler<'a> {
     }
 
     pub fn shop_move(&self, json: GameGet) {
+        #[allow(clippy::collapsible_match)]
         if let Some(confirmed) =
             self.ws.shuuro_games.buy(&json, &self.user.username)
         {
-            match confirmed {
-                LiveGameMove::BuyMove(confirmed) => {
-                    self.confirm_shop(&json, &confirmed);
-                    self.set_deploy(&json, confirmed);
-                }
-                _ => (),
+            if let LiveGameMove::BuyMove(confirmed) = confirmed {
+                self.confirm_shop(&json, &confirmed);
+                self.set_deploy(&json, confirmed);
             }
         }
     }
 
     pub async fn place_move(&self, json: GameGet) {
+        #[allow(clippy::collapsible_match)]
         if let Some(m) =
             self.ws.shuuro_games.place_move(&json, &self.user.username)
         {
             if let LiveGameMove::PlaceMove(mv, clocks, fme, tf, p) = m {
                 let res = serde_json::json!({
                     "t": "live_game_place",
-                    "move": mv,
+                    "game_move": mv,
                     "game_id": &json.game_id,
                     "to_fight": tf,
                     "first_move_error": fme,
@@ -403,6 +391,7 @@ impl<'a> MessageHandler<'a> {
     }
 
     pub async fn fight_move(&self, json: GameGet) {
+        #[allow(clippy::collapsible_match)]
         if let Some(m) =
             self.ws.shuuro_games.fight_move(&json, &self.user.username)
         {
@@ -449,10 +438,10 @@ impl<'a> MessageHandler<'a> {
 
     fn set_deploy(&self, json: &GameGet, confirmed: [bool; 2]) {
         if !confirmed.contains(&false) {
-            if let Some(res) = self.ws.shuuro_games.set_deploy(&json) {
+            if let Some(res) = self.ws.shuuro_games.set_deploy(json) {
                 self.msg_sender.send_tv_msg(res.clone(), &self.ws.players);
                 let s = self.ws.players.get_spectators(&json.game_id).unwrap();
-                let p = self.ws.shuuro_games.get_players(&json).unwrap();
+                let p = self.ws.shuuro_games.get_players(json).unwrap();
                 self.msg_sender
                     .send_msg(res, SendTo::SpectatorsAndPlayers((s, p)));
             }
@@ -514,16 +503,10 @@ impl<'a> MessageHandler<'a> {
     pub async fn draw_req(&self, json: &GameGet, username: &String) {
         let draw = self.ws.shuuro_games.draw_req(json, username);
         if let Some(draw) = draw {
-            let d = {
-                if draw.0 == 5 {
-                    true
-                } else {
-                    false
-                }
-            };
+            let d = { draw.0 == 5 };
 
             if draw.0 == 5 {
-                let res = serde_json::json!({"t": "live_game_draw", "draw": d, "game_id": &json});
+                let res = serde_json::json!({"t": "live_game_draw", "draw": d, "game_id": &json.game_id});
                 self.msg_sender.send_tv_msg(res.clone(), &self.ws.players);
                 if let Some(s) = self.ws.players.get_spectators(&json.game_id) {
                     self.msg_sender.send_msg(
@@ -557,7 +540,7 @@ impl<'a> MessageHandler<'a> {
                 "t": "live_game_resign",
                 "resign": true,
                 "player": username,
-                "game_id": json
+                "game_id": json.game_id
             });
             self.msg_sender.send_tv_msg(res.clone(), &self.ws.players);
             if let Some(s) = self.ws.players.get_spectators(&json.game_id) {
@@ -583,7 +566,7 @@ impl<'a> MessageHandler<'a> {
     }
 
     pub fn get_sfen(&self, json: &GameGet) {
-        if let Some(g) = self.ws.shuuro_games.live_sfen(&json) {
+        if let Some(g) = self.ws.shuuro_games.live_sfen(json) {
             let res = serde_json::json!({
                 "t": "live_game_sfen",
                 "game_id": &json.game_id,
@@ -609,23 +592,22 @@ impl<'a> MessageHandler<'a> {
     pub async fn start_unfinished_clock(&self) {
         if self.user.username == "iiiurosiii" {
             let unfinished = self.ws.shuuro_games.get_unfinished();
-            if unfinished.len() == 0 {
+            if unfinished.is_empty() {
                 return;
             }
-            let variants = ["shuuro", "standard"];
+            let variants =
+                ["shuuro", "standard", "shuuroFairy", "standardFairy"];
             for (i, v) in unfinished.iter().enumerate() {
                 for id in v {
-                    let json = GameGet::new(&id, &String::from(variants[i]));
+                    let json = GameGet::new(id, &String::from(variants[i]));
                     let _lost_on_time = self.lost_on_time_task(&json);
-                    let _check_clock = self.check_clock_task(&id);
+                    let _check_clock = self.check_clock_task(id);
                 }
             }
             self.ws.shuuro_games.delete_unfinished();
         }
     }
 }
-
-// sender.send_msg(&session,msg,SendTo::Spectators(SendTo::All));
 
 #[derive(Clone)]
 pub struct MsgSender {

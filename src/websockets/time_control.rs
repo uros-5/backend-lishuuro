@@ -31,7 +31,7 @@ impl From<&ShuuroGame> for TimeControl {
             DateTime::parse_from_str(&s.last_clock.to_string(), "%+").unwrap();
         Self {
             last_click,
-            clocks: s.clocks.clone(),
+            clocks: s.clocks,
             stage: s.current_stage,
             incr: s.incr.num_seconds(),
         }
@@ -45,7 +45,7 @@ impl TimeControl {
         let last_click = Utc::now().into();
 
         Self {
-            clocks: [duration, duration.clone()],
+            clocks: [duration, duration],
             stage: 0,
             incr,
             last_click,
