@@ -2,11 +2,15 @@ use async_session::chrono::Duration;
 use bson::DateTime;
 use mongodb::{options::ClientOptions, Client, Collection};
 use serde::{Deserialize, Serialize};
+use shuuro::SubVariant;
 
 use crate::websockets::{time_control::TimeControl, GameRequest};
 
 use super::serde_helpers::{
     array_i32_duration, duration_i32, duration_i32_array, i32_duration,
+};
+use crate::database::serde_helpers::{
+    deserialize_subvariant, serialize_subvariant,
 };
 
 // MONGODB MODELS
@@ -89,6 +93,9 @@ pub struct ShuuroGame {
     #[serde(skip_serializing)]
     #[serde(skip_deserializing)]
     pub draws: [bool; 2],
+    #[serde(serialize_with = "serialize_subvariant")]
+    #[serde(deserialize_with = "deserialize_subvariant")]
+    pub sub_variant: Option<SubVariant>,
 }
 
 impl From<(&GameRequest, &[String; 2], &str)> for ShuuroGame {
@@ -100,7 +107,7 @@ impl From<(&GameRequest, &[String; 2], &str)> for ShuuroGame {
             incr: Duration::seconds(f.0.incr),
             players: f.1.clone(),
             side_to_move: 0,
-            clocks: [clock.clone(), clock],
+            clocks: [clock, clock],
             last_clock: DateTime::now(),
             current_stage: 0,
             result: String::from(""),
@@ -112,6 +119,7 @@ impl From<(&GameRequest, &[String; 2], &str)> for ShuuroGame {
             history: (vec![], vec![], vec![]),
             tc: TimeControl::new(f.0.time, f.0.incr),
             draws: [false, false],
+            sub_variant: f.0.sub_variant,
         }
     }
 }

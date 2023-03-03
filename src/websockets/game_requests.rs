@@ -6,8 +6,12 @@ use std::{
 use json_value_merge::Merge;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use shuuro::SubVariant;
 
-use crate::arc2;
+use crate::{
+    arc2,
+    database::serde_helpers::{deserialize_subvariant, serialize_subvariant},
+};
 
 use super::GameGet;
 
@@ -24,6 +28,9 @@ pub struct GameRequest {
     pub variant: String,
     pub time: i64,
     pub incr: i64,
+    #[serde(serialize_with = "serialize_subvariant")]
+    #[serde(deserialize_with = "deserialize_subvariant")]
+    pub sub_variant: Option<SubVariant>,
     color: String,
 }
 
@@ -44,7 +51,6 @@ impl GameRequest {
         let mut first = serde_json::json!(&mut self.clone());
         let second = json!({ "t": t });
         first.merge(second);
-
         first
     }
 
@@ -55,17 +61,15 @@ impl GameRequest {
 
     /// Returns player colors
     pub fn colors(&self, other: &String) -> [String; 2] {
-        let c_s: [String; 2];
         let mut color = String::from("");
         if &self.color == "random" {
             color = self.random_color();
         }
         if color == "white" {
-            c_s = [String::from(&self.username), String::from(other)];
+            [String::from(&self.username), String::from(other)]
         } else {
-            c_s = [String::from(other), String::from(&self.username)];
+            [String::from(other), String::from(&self.username)]
         }
-        c_s
     }
 
     /// Generate random color.
@@ -105,12 +109,10 @@ impl GameReqs {
     /// Add GameRequest to struct.
     pub fn add(&self, mut game: GameRequest) -> Option<Value> {
         let mut all = self.all.lock().unwrap();
-        if !all.contains_key(&game.username) {
-            if game.is_valid() {
-                let res = game.response(&String::from("home_lobby_add"));
-                all.insert(String::from(&game.username), game.clone());
-                return Some(res);
-            }
+        if !all.contains_key(&game.username) && game.is_valid() {
+            let res = game.response(&String::from("home_lobby_add"));
+            all.insert(String::from(&game.username), game.clone());
+            return Some(res);
         }
         None
     }
