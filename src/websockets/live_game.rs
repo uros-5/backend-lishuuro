@@ -66,13 +66,34 @@ where
     for<'a> &'a B: BitAnd<&'a S, Output = B>,
     for<'a> B: BitOrAssign<&'a S>,
 {
-    fn new(game: ShuuroGame) -> Self {
+    fn new(mut game: ShuuroGame) -> Self {
+        let mut placement: P = P::new();
+        let mut fight: P = P::new();
+        if let Some(sub_variant) = game.sub_variant {
+            let stage = sub_variant.starting_stage();
+            let sfen = sub_variant.starting_position();
+            game.current_stage = stage;
+            if stage == 2 {
+                fight.set_sfen(sfen).expect("something gone wrong");
+                fight.generate_plinths();
+                let sfen = fight.generate_sfen();
+                let part = sfen.clone();
+                let part = part.split(' ').next().unwrap();
+                game.sfen = sfen;
+                game.history.1.push(format!(" {}_ _b_1", part));
+            } else if stage == 1 {
+                placement.set_sfen(sfen).expect("something gone wrong");
+                placement.generate_plinths();
+                game.sfen = placement.generate_sfen();
+            }
+        }
+
         Self {
             _b: PhantomData,
             _a: PhantomData,
             shop: Shop::<S>::default(),
-            placement: P::new(),
-            fight: P::new(),
+            placement,
+            fight,
             game,
         }
     }

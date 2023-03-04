@@ -185,7 +185,6 @@ impl<'a> MessageHandler<'a> {
         let shuuro_game = self.create_game(game).await;
         let id = String::from(&shuuro_game._id);
         let id2 = String::from(&id);
-        let _variant = String::from(&shuuro_game.variant);
         let msg = add_game_to_db(&self.db.mongo.games, &shuuro_game).await;
         self.msg_sender
             .send_msg(msg, SendTo::Players(shuuro_game.players.clone()));

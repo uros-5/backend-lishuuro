@@ -66,7 +66,7 @@ where
     if let Some(x) = x {
         return s.serialize_u8(x.index() as u8);
     }
-    s.serialize_u8(4_u8)
+    s.serialize_u8(100_u8)
 }
 
 pub fn deserialize_subvariant<'de, D>(

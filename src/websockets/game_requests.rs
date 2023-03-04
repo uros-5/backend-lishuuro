@@ -6,7 +6,7 @@ use std::{
 use json_value_merge::Merge;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use shuuro::SubVariant;
+use shuuro::{SubVariant, Variant};
 
 use crate::{
     arc2,
@@ -109,6 +109,12 @@ impl GameReqs {
     /// Add GameRequest to struct.
     pub fn add(&self, mut game: GameRequest) -> Option<Value> {
         let mut all = self.all.lock().unwrap();
+        let variant = Variant::from(&game.variant);
+        if let Some(subvariant) = game.sub_variant {
+            if !subvariant.is_valid(variant) {
+                return None;
+            }
+        }
         if !all.contains_key(&game.username) && game.is_valid() {
             let res = game.response(&String::from("home_lobby_add"));
             all.insert(String::from(&game.username), game.clone());
