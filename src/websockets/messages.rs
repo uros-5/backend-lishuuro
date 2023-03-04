@@ -183,13 +183,13 @@ impl<'a> MessageHandler<'a> {
     async fn accept_game_req(&self, game: GameRequest) {
         let request = game.clone();
         let shuuro_game = self.create_game(game).await;
+        let players = shuuro_game.players.clone();
         let id = String::from(&shuuro_game._id);
         let id2 = String::from(&id);
-        let msg = add_game_to_db(&self.db.mongo.games, &shuuro_game).await;
-        self.msg_sender
-            .send_msg(msg, SendTo::Players(shuuro_game.players.clone()));
         self.ws.players.new_spectators(&shuuro_game._id);
-        let _count = self.ws.shuuro_games.add_game(shuuro_game);
+        let shuuro_game = self.ws.shuuro_games.add_game(shuuro_game, true);
+        let msg = add_game_to_db(&self.db.mongo.games, &shuuro_game).await;
+        self.msg_sender.send_msg(msg, SendTo::Players(players));
         self.ws
             .shuuro_games
             .change_variant(&GameGet::from((&request, &id2)));

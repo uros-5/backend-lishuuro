@@ -23,6 +23,10 @@ use super::{
     MessageHandler,
 };
 
+// macro_rules! tv {
+
+// }
+
 macro_rules! send {
     (0, $self: ident, $json: expr, $method: ident, $($params:expr),*) => {
         if $json.variant.contains("shuuro") {
@@ -63,8 +67,8 @@ pub struct ShuuroGames {
 
 impl ShuuroGames {
     /// Add new game to live games.
-    pub fn add_game(&self, game: ShuuroGame) -> usize {
-        send!(0, self, game, add_game, game)
+    pub fn add_game(&self, game: ShuuroGame, with_value: bool) -> ShuuroGame {
+        send!(0, self, game, add_game, game, with_value)
     }
     /// Remove game after end.
     pub async fn remove_game(
@@ -225,25 +229,10 @@ impl ShuuroGames {
     }
 
     pub fn get_tv(&self) -> Vec<TvGame> {
-        let c = 0;
-        let mut games = vec![];
-        let all = self.live_games12.all.lock().unwrap();
-        for i in all.iter() {
-            if c == 20 {
-                break;
-            }
-            let f = &i.1.game.sfen;
-            if f.is_empty() {
-                continue;
-            }
-            let id = &i.1.game._id;
-            let w = &i.1.game.players[0];
-            let b = &i.1.game.players[1];
-            let t = "live_tv";
-            let tv = TvGame::new(t, id, w, b, f);
-            games.push(tv);
-        }
-        games
+        let mut all8 = self.live_games8.get_tv();
+        let mut all12 = self.live_games12.get_tv();
+        all8.append(&mut all12);
+        all8
     }
 }
 
@@ -254,16 +243,25 @@ pub struct TvGame {
     pub w: String,
     pub b: String,
     pub sfen: String,
+    pub variant: String,
 }
 
 impl TvGame {
-    pub fn new(t: &str, game_id: &str, w: &str, b: &str, fen: &str) -> Self {
+    pub fn new(
+        t: &str,
+        game_id: &str,
+        w: &str,
+        b: &str,
+        fen: &str,
+        variant: String,
+    ) -> Self {
         Self {
             t: String::from(t),
             game_id: String::from(game_id),
             w: String::from(w),
             b: String::from(b),
             sfen: String::from(fen),
+            variant,
         }
     }
 }

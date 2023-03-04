@@ -73,13 +73,15 @@ pub async fn get_game_db(
     db: &Collection<ShuuroGame>,
     id: &String,
 ) -> Option<ShuuroGame> {
-    let db = db.clone();
     let id = String::from(id);
     let filter = doc! {"_id": id};
-    if let Ok(r) = db.find_one(filter, None).await {
-        if let Some(g) = r {
-            return Some(g);
+    match db.find_one(filter, None).await {
+        Ok(r) => {
+            if let Some(g) = r {
+                return Some(g);
+            }
         }
+        _ => (),
     }
     None
 }
@@ -140,7 +142,6 @@ pub async fn get_article(
 pub async fn unfinished(
     db: &Collection<ShuuroGame>,
 ) -> HashMap<String, ShuuroGame> {
-    let db = db.clone();
     let filter = doc! {"status" : {"$lt": &0}};
     let mut hm = HashMap::new();
     let c = db.find(filter, None);

@@ -66,7 +66,7 @@ where
     for<'a> &'a B: BitAnd<&'a S, Output = B>,
     for<'a> B: BitOrAssign<&'a S>,
 {
-    fn new(mut game: ShuuroGame) -> Self {
+    fn new(mut game: ShuuroGame, with_value: bool) -> Self {
         let mut placement: P = P::new();
         let mut fight: P = P::new();
         if let Some(sub_variant) = game.sub_variant {
@@ -77,10 +77,10 @@ where
                 fight.set_sfen(sfen).expect("something gone wrong");
                 fight.generate_plinths();
                 let sfen = fight.generate_sfen();
-                let part = sfen.clone();
+                let part = String::from(&sfen);
                 let part = part.split(' ').next().unwrap();
                 game.sfen = sfen;
-                game.history.1.push(format!(" {}_ _b_1", part));
+                game.history.1.push(format!(" _{}_ _b_1", part));
             } else if stage == 1 {
                 placement.set_sfen(sfen).expect("something gone wrong");
                 placement.generate_plinths();
@@ -179,7 +179,8 @@ where
             "side_to_move": "w",
             "w": String::from(&self.game.players[0]),
             "b": String::from(&self.game.players[1]),
-            "sfen": self.game.sfen
+            "sfen": self.game.sfen,
+            "variant": &self.game.variant
         });
         value
     }
@@ -348,7 +349,7 @@ where
                         self.game.side_to_move = stm as u8;
                         self.game.sfen = self.fight.generate_sfen();
                         let m = self.fight.get_sfen_history().last().unwrap();
-                        self.game.history.2.push(m.clone());
+                        self.game.history.2.push(String::from(m));
                         return Some(LiveGameMove::FightMove(
                             String::from(&json.game_move),
                             clocks,
@@ -543,10 +544,13 @@ where
     for<'a> &'a B: BitAnd<&'a S, Output = B>,
 {
     /// Add new game to live games.
-    pub fn add_game(&self, game: ShuuroGame) -> usize {
+    pub fn add_game(&self, game: ShuuroGame, with_value: bool) -> ShuuroGame {
         let mut all = self.all.lock().unwrap();
-        all.insert(String::from(&game._id), LiveGame::new(game));
-        all.len()
+        let id = String::from(&game._id);
+        let live_game = LiveGame::new(game, with_value);
+        let game = live_game.game.clone();
+        all.insert(id, live_game);
+        game
     }
 
     /// Remove game after end.
@@ -572,7 +576,8 @@ where
         let mut v = vec![];
         for i in hm {
             //self.ws.players.new_spectators(&i.0);
-            let mut game: LiveGame<S, B, A, P> = LiveGame::new(i.1.clone());
+            let mut game: LiveGame<S, B, A, P> =
+                LiveGame::new(i.1.clone(), false);
             let id = String::from(i.0);
             v.push(id.clone());
             if i.1.current_stage == 0 {
@@ -759,23 +764,25 @@ where
 
     /// Get 20 matches for tv.
     pub fn get_tv(&self) -> Vec<TvGame> {
-        let c = 0;
+        let mut count = 0;
         let mut games = vec![];
         let all = self.all.lock().unwrap();
         for i in all.iter() {
-            if c == 20 {
+            if count == 20 {
                 break;
             }
-            let f = &i.1.game.sfen;
-            if f.is_empty() {
+            let sfen = &i.1.game.sfen;
+            if sfen.is_empty() {
                 continue;
             }
             let id = &i.1.game._id;
-            let w = &i.1.game.players[0];
-            let b = &i.1.game.players[1];
+            let white = &i.1.game.players[0];
+            let black = &i.1.game.players[1];
             let t = "live_tv";
-            let tv = TvGame::new(t, id, w, b, f);
+            let variant = String::from(&i.1.game.variant);
+            let tv = TvGame::new(t, id, white, black, sfen, variant);
             games.push(tv);
+            count += 1;
         }
         games
     }

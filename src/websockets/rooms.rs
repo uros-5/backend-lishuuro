@@ -156,7 +156,7 @@ impl ChatRooms {
             return false;
         }
         let count = chat.iter().fold(0, |mut acc, x| {
-            if &x.user == &player.username {
+            if x.user == player.username {
                 acc += 1;
             }
             acc
@@ -169,18 +169,10 @@ impl ChatRooms {
 
     /// Check if message length less than 50 chars.
     fn message_length(&self, m: &ChatMsg) -> bool {
-        if m.message.len() > 0 && m.message.len() < 50 {
+        if !m.message.is_empty() && m.message.len() < 50 {
             return true;
         }
         false
-    }
-
-    /// Format response for clients.
-    fn _response(&mut self) -> Value {
-        let mut first = serde_json::json!(&mut self.clone());
-        let second = json!({ "t": "live_chat_message" });
-        first.merge(second);
-        first
     }
 
     /// Add new message.
@@ -191,13 +183,11 @@ impl ChatRooms {
         player: &UserSession,
     ) -> Option<Value> {
         if let Some(chat) = self.messages.lock().unwrap().get_mut(id) {
-            if self.message_length(&m) {
-                if self.can_add(&chat, player) {
-                    m.update(&player.username);
-                    let res = m.response();
-                    chat.push(m.clone());
-                    return Some(res);
-                }
+            if self.message_length(m) && self.can_add(chat, player) {
+                m.update(&player.username);
+                let res = m.response();
+                chat.push(m.clone());
+                return Some(res);
             }
         }
         None
