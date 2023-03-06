@@ -4,7 +4,10 @@ use futures::TryStreamExt;
 use mongodb::{options::FindOptions, Collection};
 use serde_json::Value;
 
-use crate::lichess::login::{random_game_id, random_username};
+use crate::{
+    lichess::login::{random_game_id, random_username},
+    websockets::server_messages::live_game_start,
+};
 
 use super::{
     mongo::{Article, Player, ShuuroGame},
@@ -92,7 +95,7 @@ pub async fn add_game_to_db(
     game: &ShuuroGame,
 ) -> Value {
     if let Err(_res) = db.insert_one(game, None).await {}
-    serde_json::json!({"t": "live_game_start", "game_id": &game._id, "game_info": &game})
+    live_game_start(game)
 }
 
 /// Update all fields for game.

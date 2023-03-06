@@ -9,6 +9,8 @@ use crate::arc2;
 use crate::database::mongo::ShuuroGame;
 use crate::database::redis::UserSession;
 
+use super::server_messages::live_chat_message;
+
 /// Struct containing active players and spectators
 pub struct Players {
     players: Arc<Mutex<HashSet<String>>>,
@@ -125,14 +127,6 @@ impl ChatMsg {
         self.user = String::from(user);
         self.time = chrono::offset::Local::now().to_rfc3339();
     }
-
-    /// Formats ChatMsg for json response.
-    pub fn response(&mut self) -> Value {
-        let mut first = serde_json::json!(&mut self.clone());
-        let second = json!({ "t": "live_chat_message" });
-        first.merge(second);
-        first
-    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -179,13 +173,13 @@ impl ChatRooms {
     pub fn add_msg(
         &self,
         id: &String,
-        m: &mut ChatMsg,
+        mut m: ChatMsg,
         player: &UserSession,
     ) -> Option<Value> {
         if let Some(chat) = self.messages.lock().unwrap().get_mut(id) {
-            if self.message_length(m) && self.can_add(chat, player) {
+            if self.message_length(&m) && self.can_add(chat, player) {
                 m.update(&player.username);
-                let res = m.response();
+                let res = live_chat_message(&m);
                 chat.push(m.clone());
                 return Some(res);
             }

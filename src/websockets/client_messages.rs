@@ -27,8 +27,8 @@ pub enum MsgDatabase {
     LostOnTime(Arc<Mutex<TimeCheck>>),
 }
 
-impl From<&mut ChatMsg> for GameGet {
-    fn from(value: &mut ChatMsg) -> Self {
+impl From<&ChatMsg> for GameGet {
+    fn from(value: &ChatMsg) -> Self {
         GameGet {
             t: String::from(""),
             game_id: String::from(&value.id),

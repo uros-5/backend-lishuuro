@@ -5,6 +5,7 @@ pub mod handler;
 pub mod live_game;
 pub mod messages;
 pub mod rooms;
+pub mod server_messages;
 pub mod state;
 pub mod time_control;
 

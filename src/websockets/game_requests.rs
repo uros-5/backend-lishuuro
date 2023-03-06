@@ -13,7 +13,7 @@ use crate::{
     database::serde_helpers::{deserialize_subvariant, serialize_subvariant},
 };
 
-use super::GameGet;
+use super::{server_messages::home_lobby_game, GameGet};
 
 pub const VARIANTS: [&str; 4] =
     ["shuuro", "shuuroFairy", "standard", "standardFairy"];
@@ -44,14 +44,6 @@ impl GameRequest {
             return true;
         }
         false
-    }
-
-    /// Formats game for json response.
-    pub fn response(&mut self, t: &String) -> Value {
-        let mut first = serde_json::json!(&mut self.clone());
-        let second = json!({ "t": t });
-        first.merge(second);
-        first
     }
 
     /// Return id for game
@@ -107,7 +99,7 @@ impl Default for GameReqs {
 
 impl GameReqs {
     /// Add GameRequest to struct.
-    pub fn add(&self, mut game: GameRequest) -> Option<Value> {
+    pub fn add(&self, game: GameRequest) -> Option<Value> {
         let mut all = self.all.lock().unwrap();
         let variant = Variant::from(&game.variant);
         if let Some(subvariant) = game.sub_variant {
@@ -116,8 +108,8 @@ impl GameReqs {
             }
         }
         if !all.contains_key(&game.username) && game.is_valid() {
-            let res = game.response(&String::from("home_lobby_add"));
-            all.insert(String::from(&game.username), game.clone());
+            let res = home_lobby_game("home_lobby_add", &game);
+            all.insert(String::from(&game.username), game);
             return Some(res);
         }
         None
@@ -126,8 +118,8 @@ impl GameReqs {
     /// Remove game from struct.
     pub fn remove(&self, t: &str, username: &String) -> Option<Value> {
         let mut all = self.all.lock().unwrap();
-        if let Some(mut game) = all.remove(username) {
-            let res = game.response(&String::from(t));
+        if let Some(game) = all.remove(username) {
+            let res = home_lobby_game(t, &game);
             return Some(res);
         }
         None
@@ -141,10 +133,5 @@ impl GameReqs {
             g.push(i.clone());
         }
         g
-    }
-
-    /// Generate response for one GameRequests
-    pub fn response(&self, all: Vec<GameRequest>) -> Value {
-        json!({ "t": "home_lobby_full", "lobbyGames": all})
     }
 }

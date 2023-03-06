@@ -25,8 +25,9 @@ use crate::{
 };
 
 use super::{
-    time_control::TimeCheck, GameGet, LiveGameMove, MessageHandler,
-    MsgDatabase, TvGame,
+    server_messages::{live_game_end, live_game_lot, set_deploy},
+    time_control::TimeCheck,
+    GameGet, LiveGameMove, MessageHandler, MsgDatabase, TvGame,
 };
 
 #[derive(Debug, Clone)]
@@ -165,24 +166,13 @@ where
 
     /// DEPLOY PART
 
-    pub fn set_deploy(&mut self, id: &String) -> Value {
+    pub fn set_deploy(&mut self, id: &str) -> Value {
         self.game.current_stage = 1;
         let hand = self.load_shop_hand();
         self.placement.generate_plinths();
         self.game.sfen = self.placement.to_sfen();
         self.game.side_to_move = 0;
-        let value = serde_json::json!({
-            "t": "redirect_deploy",
-            "path": format!("/shuuro/1/{id}"),
-            "hand": hand,
-            "last_clock": Utc::now(),
-            "side_to_move": "w",
-            "w": String::from(&self.game.players[0]),
-            "b": String::from(&self.game.players[1]),
-            "sfen": self.game.sfen,
-            "variant": &self.game.variant
-        });
-        value
+        set_deploy(id, &hand, &self.game)
     }
 
     /// Transfer hand from shop to deploy part.
@@ -411,12 +401,9 @@ where
                 }
             };
         }
-        let res = serde_json::json!({
-            "t": "live_game_lot",
-            "game_id": &self.game._id,
-            "status": self.game.status,
-            "result": String::from(&self.game.result)});
-        let tv_res = serde_json::json!({"t": "live_game_end", "game_id": String::from(&self.game._id)});
+        let res =
+            live_game_lot(&self.game._id, self.game.status, &self.game.result);
+        let tv_res = live_game_end(&self.game._id);
         let tv_res = serde_json::json!({"t": "tv_game_update", "g": tv_res});
         drop(time_check);
         Some((res, tv_res, self.game.players.clone()))

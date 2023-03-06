@@ -20,8 +20,8 @@ use crate::{
 };
 
 use super::{
-    ClientMessage, GameGet, GameRequest, MessageHandler, MsgDatabase,
-    MsgSender, WsState,
+    server_messages::live_game_start, ClientMessage, GameGet, GameRequest,
+    MessageHandler, MsgDatabase, MsgSender, WsState,
 };
 
 macro_rules! send_or_break {
@@ -116,10 +116,10 @@ async fn websocket(
                         let data_type = &value["t"];
                         if let serde_json::Value::String(t) = data_type {
                             if t == "live_chat_message" {
-                                if let Ok(mut m) =
+                                if let Ok(m) =
                                     serde_json::from_str::<ChatMsg>(&text)
                                 {
-                                    handler.new_chat_msg(&mut m);
+                                    handler.new_chat_msg(m);
                                 }
                             } else if t == "live_chat_full" {
                                 if let Ok(m) =
@@ -230,7 +230,7 @@ async fn websocket(
         while let Ok(msg) = db_rx.recv().await {
             if let MsgDatabase::GetGame(id) = &msg {
                 if let Some(game) = get_game_db(&db2.mongo.games, id).await {
-                    let msg = serde_json::json!({"t": "live_game_start", "game_id": id, "game_info": &game});
+                    let msg = live_game_start(&game);
                     let _ =
                         tx2.send(ClientMessage::new(&user2, msg, SendTo::Me));
                 }
