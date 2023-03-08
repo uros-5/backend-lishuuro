@@ -238,7 +238,6 @@ impl ShuuroGames {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TvGame {
-    pub t: String,
     pub game_id: String,
     pub w: String,
     pub b: String,
@@ -248,7 +247,6 @@ pub struct TvGame {
 
 impl TvGame {
     pub fn new(
-        t: &str,
         game_id: &str,
         w: &str,
         b: &str,
@@ -256,7 +254,6 @@ impl TvGame {
         variant: String,
     ) -> Self {
         Self {
-            t: String::from(t),
             game_id: String::from(game_id),
             w: String::from(w),
             b: String::from(b),

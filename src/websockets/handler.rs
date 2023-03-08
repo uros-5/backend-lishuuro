@@ -114,16 +114,17 @@ async fn websocket(
                 Message::Text(text) => {
                     if let Ok(value) = serde_json::from_str::<Value>(&text) {
                         let data_type = &value["t"];
+                        let data = value["data"].clone();
                         if let serde_json::Value::String(t) = data_type {
                             if t == "live_chat_message" {
                                 if let Ok(m) =
-                                    serde_json::from_str::<ChatMsg>(&text)
+                                    serde_json::from_value::<ChatMsg>(data)
                                 {
                                     handler.new_chat_msg(m);
                                 }
                             } else if t == "live_chat_full" {
                                 if let Ok(m) =
-                                    serde_json::from_str::<GameGet>(&text)
+                                    serde_json::from_value::<GameGet>(data)
                                 {
                                     handler.get_chat(m.game_id);
                                 }
@@ -139,7 +140,7 @@ async fn websocket(
                                 }
                             } else if t == "home_lobby_add" {
                                 if let Ok(g) =
-                                    serde_json::from_str::<GameRequest>(&text)
+                                    serde_json::from_value::<GameRequest>(data)
                                 {
                                     handler.add_game_req(g);
                                 }
@@ -147,7 +148,7 @@ async fn websocket(
                                 handler.get_all_game_reqs();
                             } else if t == "home_lobby_accept" {
                                 if let Ok(g) =
-                                    serde_json::from_str::<GameRequest>(&text)
+                                    serde_json::from_value::<GameRequest>(data)
                                 {
                                     handler.check_game_req(g).await;
                                 }

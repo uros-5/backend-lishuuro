@@ -22,7 +22,7 @@ use super::{
         active_players_full, fmt_chat, fmt_count, home_lobby_full,
         live_game_confirmed, live_game_draw, live_game_draw2, live_game_end,
         live_game_hand, live_game_place, live_game_play, live_game_resign,
-        live_game_sfen, live_game_start, live_tv, pause_confirmed,
+        live_game_sfen, live_game_start, live_tv, pause_confirmed, set_deploy,
     },
     time_control::TimeCheck,
     GameGet, GameRequest, LiveGameMove, MsgDatabase, WsState,
@@ -121,10 +121,8 @@ impl<'a> MessageHandler<'a> {
     }
 
     pub fn get_players_count(&self) {
-        let res = fmt_count(
-            "active_players_count",
-            self.ws.players.get_players().len(),
-        );
+        let res =
+            fmt_count("active_players", self.ws.players.get_players().len());
         self.msg_sender.send_msg(res, SendTo::Me);
     }
 
@@ -187,6 +185,18 @@ impl<'a> MessageHandler<'a> {
         self.ws.players.new_spectators(&shuuro_game._id);
         let shuuro_game = self.ws.shuuro_games.add_game(shuuro_game, true);
         let msg = add_game_to_db(&self.db.mongo.games, &shuuro_game).await;
+        {
+            if shuuro_game.sub_variant.is_some() {
+                let hand = {
+                    format!(
+                        "{}{}",
+                        &shuuro_game.hands[0], &shuuro_game.hands[1]
+                    )
+                };
+                let msg = set_deploy(&shuuro_game._id, &hand, &shuuro_game);
+                self.msg_sender.send_tv_msg(msg, &self.ws.players);
+            }
+        }
         self.msg_sender.send_msg(msg, SendTo::Players(players));
         self.ws
             .shuuro_games
@@ -462,7 +472,7 @@ impl<'a> MessageHandler<'a> {
             }
         };
         self.shuuro_games_count(SendTo::Me);
-        let value = fmt_count("active_players_count", count);
+        let value = fmt_count("active_players", count);
         self.msg_sender.send_msg(value, SendTo::All);
 
         if con {
@@ -602,7 +612,8 @@ impl MsgSender {
 
     pub fn send_tv_msg(&self, message: Value, players: &Players) {
         let tv = players.get_spectators("tv").unwrap();
-        let message = serde_json::json!({"t": "tv_game_update", "g": message});
+        let message =
+            serde_json::json!({"t": "tv_game_update", "data": message});
         self.send_msg(message, SendTo::Spectators(tv));
     }
 }

@@ -404,7 +404,7 @@ where
         let res =
             live_game_lot(&self.game._id, self.game.status, &self.game.result);
         let tv_res = live_game_end(&self.game._id);
-        let tv_res = serde_json::json!({"t": "tv_game_update", "g": tv_res});
+        let tv_res = serde_json::json!({"t": "tv_game_update", "data": tv_res});
         drop(time_check);
         Some((res, tv_res, self.game.players.clone()))
     }
@@ -765,9 +765,8 @@ where
             let id = &i.1.game._id;
             let white = &i.1.game.players[0];
             let black = &i.1.game.players[1];
-            let t = "live_tv";
             let variant = String::from(&i.1.game.variant);
-            let tv = TvGame::new(t, id, white, black, sfen, variant);
+            let tv = TvGame::new(id, white, black, sfen, variant);
             games.push(tv);
             count += 1;
         }
