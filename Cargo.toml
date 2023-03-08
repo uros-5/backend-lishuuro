@@ -1,27 +1,26 @@
 [package]
-name = "axum-example"
-version = "0.1.0"
+name = "lishuuro"
+version = "0.2.0"
 edition = "2021"
-
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-axum = { version = "0.5.13", features = ["ws","headers", "json"] }
-futures = "0.3.0"
+axum = { version = "0.6.6", features = ["ws","headers", "json"] }
+futures = "0.3.26"
 async-session = "3.0.0"
-tokio = { version = "1.0", features = ["full", "time"] }
+tokio = { version = "1", features = ["full", "time"] }
 tower-http = { version = "0.3.0", features = ["cors", "util"] }
 tower = { version = "0.4", features = ["util"] }
-serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1.0.152", features = ["derive"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
-redis = { version = "0.21.5", features = ["aio", "connection-manager", "tokio-comp"] }
+redis = { version = "0.22.3", features = ["aio", "connection-manager", "tokio-comp"] }
 sha2 = "0.10.1"
 hex-literal = "0.2.1"
 base64 = "0.13.0"
 rand = "0.8.4"
 url = "2.2.2"
-bson = { version = "2.1.0" }
+bson = { version = "2.5.0" }
 querystring = "1.1.0"
 serde_json = "1.0.81"
 reqwest = { version = "0.11.10", features = ["json"] }
@@ -29,10 +28,17 @@ axum-macros = "0.2.2"
 hyper = "0.14"
 json_value_merge = "1.1.2"
 chrono = "0.4.19"
-shuuro = {git = "https://github.com/uros-5/shuuro", branch = "fairy"}
+shuuro = {git = "https://github.com/uros-5/shuuro", branch = "extended", features = ["shuuro12", "shuuro8"]}
 ctrlc = "3.2.3"
+dotenv = "0.15.0"
 
 [dependencies.mongodb]
-version = "2.2.2"
+version = "2.3.1"
 default-features = false
 features = ["tokio-runtime"]
+
+[profile.release]
+strip = true
+opt-level = "s"
+lto = true
+codegen-units = 1

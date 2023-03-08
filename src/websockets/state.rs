@@ -1,11 +1,14 @@
+use std::collections::HashMap;
+
 use crate::database::{mongo::ShuuroGame, queries::unfinished};
 
 use super::{
+    games::ShuuroGames,
     rooms::{ChatRooms, Players},
-    ClientMessage, GameReqs, ShuuroGames,
+    ClientMessage, GameReqs,
 };
 use mongodb::Collection;
-use tokio::sync::broadcast::{self};
+use tokio::sync::broadcast;
 
 /// This struct contains all data.
 pub struct WsState {
@@ -36,7 +39,18 @@ impl WsState {
     /// Load all games that are not finished.
     pub async fn load_unfinished(&self, db: &Collection<ShuuroGame>) {
         let unfinished = unfinished(db).await;
+        let mut games8 = HashMap::new();
+        let mut games12 = HashMap::new();
         self.players.add_spectators(&unfinished);
+        for game in unfinished {
+            self.players.add_players(&game.1.players);
+            if game.1.variant.contains("shuuro") {
+                games12.insert(game.0, game.1);
+            } else {
+                games8.insert(game.0, game.1);
+            }
+        }
+        let unfinished = vec![games8, games12];
         self.shuuro_games.load_unfinished(unfinished);
     }
 }

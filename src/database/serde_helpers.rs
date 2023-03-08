@@ -1,5 +1,6 @@
 use async_session::chrono::Duration;
 use serde::{ser::SerializeTuple, Deserialize, Deserializer, Serializer};
+use shuuro::SubVariant;
 use std::time::Duration as StdD;
 
 // Serde helpers
@@ -13,7 +14,7 @@ where
     s.serialize_u64(duration)
 }
 
-/// Serializing from String to Duration
+/// Deserializing from String to Duration
 pub fn i32_duration<'de, D>(data: D) -> Result<Duration, D::Error>
 where
     D: Deserializer<'de>,
@@ -36,7 +37,7 @@ where
         let value = duration.num_milliseconds() as u64;
         tup.serialize_element(&value).unwrap();
     }
-    return Ok(tup.end().ok().unwrap());
+    Ok(tup.end().ok().unwrap())
 }
 
 /// Deserializing from String to [Duration; 2]
@@ -53,4 +54,31 @@ where
         }
     }
     Ok(durations)
+}
+
+pub fn serialize_subvariant<S>(
+    x: &Option<SubVariant>,
+    s: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    if let Some(x) = x {
+        return s.serialize_u8(x.index() as u8);
+    }
+    s.serialize_u8(100_u8)
+}
+
+pub fn deserialize_subvariant<'de, D>(
+    data: D,
+) -> Result<Option<SubVariant>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s: usize = Deserialize::deserialize(data)?;
+    if let Ok(d) = SubVariant::try_from(s as u8) {
+        Ok(Some(d))
+    } else {
+        Ok(None)
+    }
 }

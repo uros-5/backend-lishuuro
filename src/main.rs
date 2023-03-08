@@ -1,4 +1,4 @@
-use axum::{http::HeaderValue, routing::get, Extension, Router};
+use axum::{http::HeaderValue, routing::get, Router};
 
 use std::{
     net::SocketAddr,
@@ -22,12 +22,13 @@ use crate::{
 
 #[tokio::main]
 async fn main() {
-    // build our application with a route
+    dotenv::dotenv().ok();
     let db = Database::new().await;
     let cors_layer = cors(&db.key);
     let db = Arc::new(db);
     let ws = Arc::new(WsState::default());
     ws.load_unfinished(&db.mongo.games).await;
+    let state = AppState::new(db, ws);
     let app = Router::new()
         .route("/login", get(login))
         .route("/callback", get(callback))
@@ -35,16 +36,25 @@ async fn main() {
         .route("/ws/", get(websocket_handler))
         .route("/news/:id", get(article))
         .route("/games/:username", get(get_games))
-        .layer(Extension(db))
-        .layer(Extension(ws))
+        .with_state(state)
         .layer(cors_layer);
-
-    // run it
     let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await
         .unwrap();
+}
+
+#[derive(Clone)]
+pub struct AppState {
+    pub db: Arc<Database>,
+    pub ws: Arc<WsState>,
+}
+
+impl AppState {
+    pub fn new(db: Arc<Database>, ws: Arc<WsState>) -> Self {
+        Self { db, ws }
+    }
 }
 
 fn cors(key: &MyKey) -> CorsLayer {
