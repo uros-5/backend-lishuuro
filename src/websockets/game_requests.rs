@@ -87,6 +87,7 @@ impl From<(&GameRequest, &String)> for GameGet {
 
 pub struct GameReqs {
     all: Arc<Mutex<HashMap<String, GameRequest>>>,
+    // players:
 }
 
 impl Default for GameReqs {

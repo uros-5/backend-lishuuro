@@ -44,9 +44,9 @@ impl WsState {
         self.players.add_spectators(&unfinished);
         for game in unfinished {
             if game.1.variant.contains("shuuro") {
-                games8.insert(game.0, game.1);
-            } else {
                 games12.insert(game.0, game.1);
+            } else {
+                games8.insert(game.0, game.1);
             }
         }
         let unfinished = vec![games8, games12];

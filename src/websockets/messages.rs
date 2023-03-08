@@ -115,14 +115,14 @@ impl<'a> MessageHandler<'a> {
     }
 
     pub fn get_players(&self) {
-        let players = self.ws.players.get_players();
+        let players = self.ws.players.get_online();
         let res = active_players_full(players);
         self.msg_sender.send_msg(res, SendTo::Me);
     }
 
     pub fn get_players_count(&self) {
         let res =
-            fmt_count("active_players", self.ws.players.get_players().len());
+            fmt_count("active_players", self.ws.players.get_online().len());
         self.msg_sender.send_msg(res, SendTo::Me);
     }
 
@@ -151,8 +151,10 @@ impl<'a> MessageHandler<'a> {
     }
 
     pub fn add_game_req(&self, game_req: GameRequest) {
-        if let Some(msg) = self.ws.game_reqs.add(game_req) {
-            self.msg_sender.send_msg(msg, SendTo::All);
+        if self.ws.players.check_in_game(&game_req.username) {
+            if let Some(msg) = self.ws.game_reqs.add(game_req) {
+                self.msg_sender.send_msg(msg, SendTo::All);
+            }
         }
     }
 
@@ -197,6 +199,7 @@ impl<'a> MessageHandler<'a> {
                 self.msg_sender.send_tv_msg(msg, &self.ws.players);
             }
         }
+        self.ws.players.add_players(&players);
         self.msg_sender.send_msg(msg, SendTo::Players(players));
         self.ws
             .shuuro_games
@@ -231,6 +234,7 @@ impl<'a> MessageHandler<'a> {
                             if let Some(values) =
                                 ws2.shuuro_games.clock_status(&json, b)
                             {
+                                ws2.players.remove_players(&values.2);
                                 msg_sender.send_msg(
                                     values.0.clone(),
                                     SendTo::Players(values.2),
@@ -373,6 +377,7 @@ impl<'a> MessageHandler<'a> {
         {
             if let LiveGameMove::PlaceMove(mv, clocks, fme, tf, p) = m {
                 let res = live_game_place(&mv, &json.game_id, tf, fme, &clocks);
+                let players = [String::from(&p[0]), String::from(&p[1])];
                 self.msg_sender.send_tv_msg(res.clone(), &self.ws.players);
                 if let Some(s) = self.ws.players.get_spectators(&json.game_id) {
                     self.msg_sender
@@ -385,6 +390,7 @@ impl<'a> MessageHandler<'a> {
                         .await;
                     self.shuuro_games_count(SendTo::All);
                     self.ws.players.remove_spectators(&json.game_id);
+                    self.ws.players.remove_players(&players);
                 }
             }
         }
@@ -412,6 +418,7 @@ impl<'a> MessageHandler<'a> {
                         .shuuro_games
                         .remove_game(&json, &self.db.mongo.games)
                         .await;
+                    self.ws.players.remove_players(&players);
                     self.shuuro_games_count(SendTo::All);
                     self.ws.players.remove_spectators(&json.game_id);
                     let res_end = live_game_end(&json.game_id);
@@ -449,7 +456,7 @@ impl<'a> MessageHandler<'a> {
                 self.ws
                     .players
                     .add_spectator(&String::from("home"), &self.user.username);
-                self.ws.players.add_player(&self.user.username)
+                self.ws.players.add_online_player(&self.user.username)
             } else {
                 self.ws.players.remove_spectator(
                     &String::from("home"),
@@ -468,7 +475,7 @@ impl<'a> MessageHandler<'a> {
                 {
                     self.msg_sender.send_msg(r, SendTo::All);
                 }
-                self.ws.players.remove_player(&self.user.username)
+                self.ws.players.remove_online_player(&self.user.username)
             }
         };
         self.shuuro_games_count(SendTo::Me);
@@ -501,6 +508,7 @@ impl<'a> MessageHandler<'a> {
             if draw.0 == 5 {
                 let res = live_game_draw(d, &json.game_id);
                 self.msg_sender.send_tv_msg(res.clone(), &self.ws.players);
+                self.ws.players.remove_players(&draw.1);
                 if let Some(s) = self.ws.players.get_spectators(&json.game_id) {
                     self.msg_sender.send_msg(
                         res,
@@ -515,7 +523,7 @@ impl<'a> MessageHandler<'a> {
                     .await;
                 self.shuuro_games_count(SendTo::All);
             } else {
-                let res = live_game_draw2(d, &json.game_id, &username);
+                let res = live_game_draw2(d, &json.game_id, username);
                 if let Some(s) = self.ws.players.get_spectators(&json.game_id) {
                     self.msg_sender.send_msg(
                         res,
@@ -530,6 +538,7 @@ impl<'a> MessageHandler<'a> {
     pub async fn resign(&self, json: &GameGet, username: &String) {
         if let Some(players) = self.ws.shuuro_games.resign(json, username) {
             let res = live_game_resign(username, &json.game_id);
+            self.ws.players.remove_players(&players);
             self.msg_sender.send_tv_msg(res.clone(), &self.ws.players);
             if let Some(s) = self.ws.players.get_spectators(&json.game_id) {
                 self.msg_sender
@@ -578,9 +587,10 @@ impl<'a> MessageHandler<'a> {
                 return;
             }
             let variants =
-                ["shuuro", "standard", "shuuroFairy", "standardFairy"];
+                ["standard", "shuuro", "shuuroFairy", "standardFairy"];
             for (i, v) in unfinished.iter().enumerate() {
                 for id in v {
+                    println!("start tasks");
                     let json = GameGet::new(id, &String::from(variants[i]));
                     let _lost_on_time = self.lost_on_time_task(&json);
                     let _check_clock = self.check_clock_task(id);

@@ -1,9 +1,8 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
-use json_value_merge::Merge;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 
 use crate::arc2;
 use crate::database::mongo::ShuuroGame;
@@ -13,23 +12,45 @@ use super::server_messages::live_chat_message;
 
 /// Struct containing active players and spectators
 pub struct Players {
-    players: Arc<Mutex<HashSet<String>>>,
+    online: Arc<Mutex<HashSet<String>>>,
+    in_game: Arc<Mutex<HashSet<String>>>,
     spectators: Arc<Mutex<HashMap<String, HashSet<String>>>>,
 }
 
 impl Players {
-    /// Adding one player
-    pub fn add_player(&self, username: &str) -> usize {
-        let mut players = self.players.lock().unwrap();
-        players.insert(String::from(username));
-        players.len()
+    /// Adding one online player
+    pub fn add_online_player(&self, username: &str) -> usize {
+        let mut online = self.online.lock().unwrap();
+        online.insert(String::from(username));
+        online.len()
+    }
+
+    /// Adding players in game
+    pub fn add_players(&self, players: &[String; 2]) -> usize {
+        let mut in_game = self.in_game.lock().unwrap();
+        in_game.insert(String::from(&players[0]));
+        in_game.insert(String::from(&players[1]));
+        in_game.len()
+    }
+
+    /// Removing players.
+    pub fn remove_players(&self, players: &[String; 2]) -> usize {
+        let mut in_game = self.in_game.lock().unwrap();
+        in_game.remove(&players[0]);
+        in_game.remove(&players[1]);
+        in_game.len()
+    }
+
+    pub fn check_in_game(&self, username: &str) -> bool {
+        let in_game = self.in_game.lock().unwrap();
+        in_game.get(username).is_none()
     }
 
     /// Removing player
-    pub fn remove_player(&self, username: &String) -> usize {
-        let mut players = self.players.lock().unwrap();
-        players.remove(username);
-        players.len()
+    pub fn remove_online_player(&self, username: &String) -> usize {
+        let mut online = self.online.lock().unwrap();
+        online.remove(username);
+        online.len()
     }
 
     pub fn add_spectator(
@@ -67,8 +88,8 @@ impl Players {
         None
     }
 
-    pub fn get_players(&self) -> HashSet<String> {
-        self.players.lock().unwrap().clone()
+    pub fn get_online(&self) -> HashSet<String> {
+        self.online.lock().unwrap().clone()
     }
 
     pub fn new_spectators(&self, id: &String) {
@@ -95,7 +116,8 @@ impl Default for Players {
         spectators.insert(String::from("home"), HashSet::new());
         spectators.insert(String::from("tv"), HashSet::new());
         Self {
-            players: arc2(HashSet::default()),
+            online: arc2(HashSet::default()),
+            in_game: arc2(HashSet::default()),
             spectators: arc2(spectators),
         }
     }

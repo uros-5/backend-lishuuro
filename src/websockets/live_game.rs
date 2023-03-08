@@ -608,6 +608,7 @@ where
 
     pub fn get_hand(&self, id: &String, user: &UserSession) -> Option<String> {
         let all = self.all.lock().unwrap();
+
         if let Some(g) = all.get(id) {
             if let Some(index) = g.player_index(&g.game.players, &user.username)
             {
