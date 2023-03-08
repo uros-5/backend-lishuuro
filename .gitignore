@@ -1,4 +1,4 @@
 /target
 /Cargo.lock
-/src/lichess/my_key.json
+# /src/websockets/server_messages.rs
 /.vscode

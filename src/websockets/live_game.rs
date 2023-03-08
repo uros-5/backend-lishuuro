@@ -7,7 +7,6 @@ use std::{
 };
 
 use bson::DateTime as DT;
-use chrono::Utc;
 use mongodb::Collection;
 use serde_json::Value;
 use shuuro::{
@@ -67,7 +66,7 @@ where
     for<'a> &'a B: BitAnd<&'a S, Output = B>,
     for<'a> B: BitOrAssign<&'a S>,
 {
-    fn new(mut game: ShuuroGame, with_value: bool) -> Self {
+    fn new(mut game: ShuuroGame) -> Self {
         let mut placement: P = P::new();
         let mut fight: P = P::new();
         if let Some(sub_variant) = game.sub_variant {
@@ -531,10 +530,10 @@ where
     for<'a> &'a B: BitAnd<&'a S, Output = B>,
 {
     /// Add new game to live games.
-    pub fn add_game(&self, game: ShuuroGame, with_value: bool) -> ShuuroGame {
+    pub fn add_game(&self, game: ShuuroGame) -> ShuuroGame {
         let mut all = self.all.lock().unwrap();
         let id = String::from(&game._id);
-        let live_game = LiveGame::new(game, with_value);
+        let live_game = LiveGame::new(game);
         let game = live_game.game.clone();
         all.insert(id, live_game);
         game
@@ -563,8 +562,7 @@ where
         let mut v = vec![];
         for i in hm {
             //self.ws.players.new_spectators(&i.0);
-            let mut game: LiveGame<S, B, A, P> =
-                LiveGame::new(i.1.clone(), false);
+            let mut game: LiveGame<S, B, A, P> = LiveGame::new(i.1.clone());
             let id = String::from(i.0);
             v.push(id.clone());
             if i.1.current_stage == 0 {

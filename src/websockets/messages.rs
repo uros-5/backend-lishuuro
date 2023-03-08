@@ -185,7 +185,7 @@ impl<'a> MessageHandler<'a> {
         let id = String::from(&shuuro_game._id);
         let id2 = String::from(&id);
         self.ws.players.new_spectators(&shuuro_game._id);
-        let shuuro_game = self.ws.shuuro_games.add_game(shuuro_game, true);
+        let shuuro_game = self.ws.shuuro_games.add_game(shuuro_game);
         let msg = add_game_to_db(&self.db.mongo.games, &shuuro_game).await;
         {
             if shuuro_game.sub_variant.is_some() {
@@ -590,7 +590,6 @@ impl<'a> MessageHandler<'a> {
                 ["standard", "shuuro", "shuuroFairy", "standardFairy"];
             for (i, v) in unfinished.iter().enumerate() {
                 for id in v {
-                    println!("start tasks");
                     let json = GameGet::new(id, &String::from(variants[i]));
                     let _lost_on_time = self.lost_on_time_task(&json);
                     let _check_clock = self.check_clock_task(id);

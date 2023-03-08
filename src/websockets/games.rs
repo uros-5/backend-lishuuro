@@ -67,8 +67,8 @@ pub struct ShuuroGames {
 
 impl ShuuroGames {
     /// Add new game to live games.
-    pub fn add_game(&self, game: ShuuroGame, with_value: bool) -> ShuuroGame {
-        send!(0, self, game, add_game, game, with_value)
+    pub fn add_game(&self, game: ShuuroGame) -> ShuuroGame {
+        send!(0, self, game, add_game, game)
     }
     /// Remove game after end.
     pub async fn remove_game(

@@ -43,6 +43,7 @@ impl WsState {
         let mut games12 = HashMap::new();
         self.players.add_spectators(&unfinished);
         for game in unfinished {
+            self.players.add_players(&game.1.players);
             if game.1.variant.contains("shuuro") {
                 games12.insert(game.0, game.1);
             } else {

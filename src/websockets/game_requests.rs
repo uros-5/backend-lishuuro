@@ -3,9 +3,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use json_value_merge::Merge;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use shuuro::{SubVariant, Variant};
 
 use crate::{
