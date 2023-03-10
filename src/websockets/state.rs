@@ -44,6 +44,7 @@ impl WsState {
         self.players.add_spectators(&unfinished);
         for game in unfinished {
             self.players.add_players(&game.1.players);
+            self.chat.add_chat(&game.0);
             if game.1.variant.contains("shuuro") {
                 games12.insert(game.0, game.1);
             } else {

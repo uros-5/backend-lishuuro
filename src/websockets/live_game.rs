@@ -66,16 +66,26 @@ where
     for<'a> &'a B: BitAnd<&'a S, Output = B>,
     for<'a> B: BitOrAssign<&'a S>,
 {
-    fn new(mut game: ShuuroGame) -> Self {
+    fn new(mut game: ShuuroGame, unfinished: bool) -> Self {
         let mut placement: P = P::new();
         let mut fight: P = P::new();
         if let Some(sub_variant) = game.sub_variant {
             let stage = sub_variant.starting_stage();
-            let sfen = sub_variant.starting_position();
+            let sfen = {
+                if unfinished {
+                    &game.sfen
+                } else {
+                    sub_variant.starting_position()
+                }
+            };
             game.current_stage = stage;
             if stage == 2 {
                 fight.set_sfen(sfen).expect("something gone wrong");
-                fight.generate_plinths();
+                {
+                    if !unfinished {
+                        fight.generate_plinths();
+                    }
+                }
                 let sfen = fight.generate_sfen();
                 let part = String::from(&sfen);
                 let part = part.split(' ').next().unwrap();
@@ -83,7 +93,11 @@ where
                 game.history.1.push(format!(" _{}_ _b_1", part));
             } else if stage == 1 {
                 placement.set_sfen(sfen).expect("something gone wrong");
-                placement.generate_plinths();
+                {
+                    if !unfinished {
+                        fight.generate_plinths();
+                    }
+                }
                 game.sfen = placement.generate_sfen();
             }
         }
@@ -533,7 +547,7 @@ where
     pub fn add_game(&self, game: ShuuroGame) -> ShuuroGame {
         let mut all = self.all.lock().unwrap();
         let id = String::from(&game._id);
-        let live_game = LiveGame::new(game);
+        let live_game = LiveGame::new(game, false);
         let game = live_game.game.clone();
         all.insert(id, live_game);
         game
@@ -562,7 +576,8 @@ where
         let mut v = vec![];
         for i in hm {
             //self.ws.players.new_spectators(&i.0);
-            let mut game: LiveGame<S, B, A, P> = LiveGame::new(i.1.clone());
+            let mut game: LiveGame<S, B, A, P> =
+                LiveGame::new(i.1.clone(), true);
             let id = String::from(i.0);
             v.push(id.clone());
             if i.1.current_stage == 0 {
