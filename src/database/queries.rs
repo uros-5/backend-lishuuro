@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use crate::{
     lichess::login::{random_game_id, random_username},
-    websockets::server_messages::live_game_start,
+    websockets::{server_messages::live_game_start, GameGet},
 };
 
 use super::{
@@ -155,5 +155,20 @@ pub async fn unfinished(
             hm.insert(String::from(&g._id), g);
         }
     }
-    return hm;
+    hm
+}
+
+/// push new player move to history array
+pub async fn insert_move(db: &Collection<ShuuroGame>, json: &GameGet) {
+    let query = doc! {"_id": &json.game_id};
+    let field = {
+        if json.game_move.contains('@') {
+            1
+        } else {
+            2
+        }
+    };
+    let field = format!("history.{}", field);
+    let update = doc! {"$push": {field: &json.game_move}};
+    db.update_one(query, update, None).await.ok();
 }

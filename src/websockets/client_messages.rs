@@ -17,14 +17,15 @@ pub struct GameGet {
 pub enum LiveGameMove {
     BuyMove([bool; 2]),
     LostOnTime(usize),
-    PlaceMove(String, [u64; 2], bool, bool, [String; 2]),
-    FightMove(String, [u64; 2], i32, String, [String; 2], String),
+    PlaceMove(String, [u64; 2], bool, bool, [String; 2], String),
+    FightMove(String, [u64; 2], i32, String, [String; 2], String, String),
 }
 
 #[derive(Clone)]
 pub enum MsgDatabase {
     GetGame(String),
     LostOnTime(Arc<Mutex<TimeCheck>>),
+    InsertGameMove(GameGet),
 }
 
 impl From<&ChatMsg> for GameGet {

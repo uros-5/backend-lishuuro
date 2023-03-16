@@ -268,13 +268,14 @@ where
                                 as u8;
                             self.game.sfen = self.placement.generate_sfen();
                             self.game.hands = self.get_hands();
-                            self.game.history.1.push(s);
+                            self.game.history.1.push(String::from(&s));
                             return Some(LiveGameMove::PlaceMove(
                                 m,
                                 clocks,
                                 fme,
                                 tf,
                                 self.game.players.clone(),
+                                s,
                             ));
                         }
                     } else {
@@ -360,6 +361,7 @@ where
                             String::from(&self.game.result),
                             self.game.players.clone(),
                             outcome,
+                            String::from(&self.game.sfen),
                         ));
                     }
                 } else {

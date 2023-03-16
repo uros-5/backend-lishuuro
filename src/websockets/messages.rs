@@ -370,12 +370,12 @@ impl<'a> MessageHandler<'a> {
         }
     }
 
-    pub async fn place_move(&self, json: GameGet) {
+    pub async fn place_move(&self, mut json: GameGet) {
         #[allow(clippy::collapsible_match)]
         if let Some(m) =
             self.ws.shuuro_games.place_move(&json, &self.user.username)
         {
-            if let LiveGameMove::PlaceMove(mv, clocks, fme, tf, p) = m {
+            if let LiveGameMove::PlaceMove(mv, clocks, fme, tf, p, sfen) = m {
                 let res = live_game_place(&mv, &json.game_id, tf, fme, &clocks);
                 let players = [String::from(&p[0]), String::from(&p[1])];
                 self.msg_sender.send_tv_msg(res.clone(), &self.ws.players);
@@ -391,12 +391,18 @@ impl<'a> MessageHandler<'a> {
                     self.shuuro_games_count(SendTo::All);
                     self.ws.players.remove_spectators(&json.game_id);
                     self.ws.players.remove_players(&players);
+                } else {
+                    json.game_move = sfen;
+                    let _ = self
+                        .db_tx
+                        .clone()
+                        .send(MsgDatabase::InsertGameMove(json));
                 }
             }
         }
     }
 
-    pub async fn fight_move(&self, json: GameGet) {
+    pub async fn fight_move(&self, mut json: GameGet) {
         #[allow(clippy::collapsible_match)]
         if let Some(m) =
             self.ws.shuuro_games.fight_move(&json, &self.user.username)
@@ -408,11 +414,13 @@ impl<'a> MessageHandler<'a> {
                 _result,
                 players,
                 o,
+                sfen,
             ) = m
             {
                 let res =
                     live_game_play(&m, status, &json.game_id, &clocks, &o);
                 let tv_res = res.clone();
+                let game_id = String::from(&json.game_id);
                 if status > 0 {
                     self.ws
                         .shuuro_games
@@ -423,8 +431,14 @@ impl<'a> MessageHandler<'a> {
                     self.ws.players.remove_spectators(&json.game_id);
                     let res_end = live_game_end(&json.game_id);
                     self.msg_sender.send_tv_msg(res_end, &self.ws.players);
+                } else {
+                    json.game_move = sfen;
+                    let _ = self
+                        .db_tx
+                        .clone()
+                        .send(MsgDatabase::InsertGameMove(json));
                 }
-                if let Some(s) = self.ws.players.get_spectators(&json.game_id) {
+                if let Some(s) = self.ws.players.get_spectators(&game_id) {
                     self.msg_sender.send_msg(
                         res,
                         SendTo::SpectatorsAndPlayers((s, players)),

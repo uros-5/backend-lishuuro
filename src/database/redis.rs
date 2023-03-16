@@ -154,7 +154,9 @@ impl RedisCli {
         force_set: bool,
     ) -> UserSession {
         if value.is_new || force_set {
-            value.not_new();
+            if force_set == false {
+                value.not_new();
+            }
             self.con
                 .set::<String, String, String>(
                     String::from(key),

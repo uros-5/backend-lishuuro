@@ -14,7 +14,11 @@ use serde_json::Value;
 use tokio::sync::broadcast;
 
 use crate::{
-    database::{queries::get_game_db, redis::UserSession, Database},
+    database::{
+        queries::{get_game_db, insert_move},
+        redis::UserSession,
+        Database,
+    },
     websockets::{rooms::ChatMsg, SendTo},
     AppState,
 };
@@ -229,12 +233,22 @@ async fn websocket(
 
     let db_send_task = tokio::spawn(async move {
         while let Ok(msg) = db_rx.recv().await {
-            if let MsgDatabase::GetGame(id) = &msg {
-                if let Some(game) = get_game_db(&db2.mongo.games, id).await {
-                    let msg = live_game_start(&game);
-                    let _ =
-                        tx2.send(ClientMessage::new(&user2, msg, SendTo::Me));
+            match msg {
+                MsgDatabase::GetGame(id) => {
+                    if let Some(game) = get_game_db(&db2.mongo.games, &id).await
+                    {
+                        let msg = live_game_start(&game);
+                        let _ = tx2.send(ClientMessage::new(
+                            &user2,
+                            msg,
+                            SendTo::Me,
+                        ));
+                    }
                 }
+                MsgDatabase::InsertGameMove(json) => {
+                    insert_move(&db2.mongo.games, &json).await;
+                }
+                _ => (),
             }
         }
     });
