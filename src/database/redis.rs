@@ -138,9 +138,8 @@ impl RedisCli {
     /// Get session if it exist.
     pub async fn get_session(&mut self, key: &str) -> Option<UserSession> {
         if let Ok(s) = self.con.get::<String, String>(String::from(key)).await {
-            if let Ok(mut value) = serde_json::from_str::<UserSession>(&s) {
-                value.not_new();
-                self.set_session(key, value.clone()).await;
+            if let Ok(value) = serde_json::from_str::<UserSession>(&s) {
+                let value = self.set_session(key, value).await;
                 return Some(value);
             }
         }
@@ -148,21 +147,29 @@ impl RedisCli {
     }
 
     /// Set new session.
-    pub async fn set_session(&mut self, key: &str, value: UserSession) {
-        self.con
-            .set::<String, String, String>(
-                String::from(key),
-                serde_json::to_string(&value).unwrap(),
-            )
-            .await
-            .unwrap();
-        let _e = self
-            .con
-            .expire::<String, usize>(
-                String::from(key),
-                self.ttl_days(value.reg),
-            )
-            .await;
+    pub async fn set_session(
+        &mut self,
+        key: &str,
+        mut value: UserSession,
+    ) -> UserSession {
+        if value.is_new {
+            value.not_new();
+            self.con
+                .set::<String, String, String>(
+                    String::from(key),
+                    serde_json::to_string(&value).unwrap(),
+                )
+                .await
+                .unwrap();
+            let _e = self
+                .con
+                .expire::<String, usize>(
+                    String::from(key),
+                    self.ttl_days(value.reg),
+                )
+                .await;
+        }
+        value
     }
 
     /// Create session.
@@ -222,17 +229,14 @@ where
         let session_cookie = cookie
             .as_ref()
             .and_then(|cookie| cookie.get(AXUM_SESSION_COOKIE_NAME));
-        if session_cookie.is_some() {
-            if let Some(session) =
-                redis.get_session(session_cookie.unwrap()).await
-            {
+        if let Some(session) = session_cookie {
+            if let Some(session) = redis.get_session(session).await {
                 return Ok(session);
             }
         }
         let session = redis
             .new_session(&store.db.mongo.players, cookie_value)
             .await;
-
         return Ok(session);
     }
 }
