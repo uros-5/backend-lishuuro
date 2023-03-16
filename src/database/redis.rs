@@ -139,7 +139,7 @@ impl RedisCli {
     pub async fn get_session(&mut self, key: &str) -> Option<UserSession> {
         if let Ok(s) = self.con.get::<String, String>(String::from(key)).await {
             if let Ok(value) = serde_json::from_str::<UserSession>(&s) {
-                let value = self.set_session(key, value).await;
+                let value = self.set_session(key, value, false).await;
                 return Some(value);
             }
         }
@@ -151,8 +151,9 @@ impl RedisCli {
         &mut self,
         key: &str,
         mut value: UserSession,
+        force_set: bool,
     ) -> UserSession {
-        if value.is_new {
+        if value.is_new || force_set {
             value.not_new();
             self.con
                 .set::<String, String, String>(
@@ -190,8 +191,7 @@ impl RedisCli {
                     "",
                     cookie_value,
                 );
-                self.set_session(s.id(), value.clone()).await;
-                return value;
+                return self.set_session(s.id(), value, true).await;
             }
         }
     }

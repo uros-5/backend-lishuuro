@@ -29,7 +29,7 @@ pub async fn login(
     let mut redis = state.db.redis.clone();
     let url = login_url(&key.login_state, key.prod);
     user.new_cv(&url.1);
-    redis.set_session(&user.session, user.clone()).await;
+    redis.set_session(&user.session, user.clone(), true).await;
     Redirect::permanent(url.0.as_str())
 }
 
@@ -54,8 +54,8 @@ pub async fn callback(
                 let player =
                     player_exist(&mongo.players, &lichess_user, &user).await;
                 if let Some(player) = player {
-                    let session = &player.session.clone();
-                    redis.set_session(session, player).await;
+                    let session = String::from(&player.session);
+                    redis.set_session(&session, player, true).await;
                 }
             }
         }
