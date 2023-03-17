@@ -10,7 +10,7 @@ use crate::{
 };
 
 use super::{
-    mongo::{Article, Player, ShuuroGame},
+    mongo::{Article, Player, ProfileGame, ShuuroGame},
     redis::UserSession,
 };
 
@@ -112,15 +112,19 @@ pub async fn update_entire_game(
 pub async fn get_player_games(
     db: &Collection<ShuuroGame>,
     username: &String,
-) -> Option<Vec<ShuuroGame>> {
+) -> Option<Vec<ProfileGame>> {
     let options = FindOptions::builder()
+        .projection(doc! {"history": 0, "credits": 0, "hands": 0})
         .sort(doc! {"$natural": -1})
         .limit(Some(5))
         .build();
     let filter = doc! {"players": {"$in": [username]}};
-    let q = db.find(filter, options).await;
+    let q = db
+        .clone_with_type::<ProfileGame>()
+        .find(filter, options)
+        .await;
     if let Ok(res) = q {
-        let games: Vec<ShuuroGame> =
+        let games: Vec<ProfileGame> =
             res.try_collect().await.unwrap_or_else(|_| vec![]);
         return Some(games);
     }

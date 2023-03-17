@@ -123,3 +123,26 @@ impl From<(&GameRequest, &[String; 2], &str)> for ShuuroGame {
         }
     }
 }
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ProfileGame {
+    pub _id: String,
+    #[serde(serialize_with = "duration_i32")]
+    #[serde(deserialize_with = "i32_duration")]
+    pub min: Duration,
+    #[serde(serialize_with = "duration_i32")]
+    #[serde(deserialize_with = "i32_duration")]
+    pub incr: Duration,
+    pub players: [String; 2],
+    pub side_to_move: u8,
+    pub last_clock: DateTime,
+    pub current_stage: u8,
+    pub result: String,
+    pub status: i32,
+    pub variant: String,
+    pub sfen: String,
+    pub tc: TimeControl,
+    #[serde(serialize_with = "serialize_subvariant")]
+    #[serde(deserialize_with = "deserialize_subvariant")]
+    pub sub_variant: Option<SubVariant>,
+}
