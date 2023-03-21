@@ -125,7 +125,7 @@ where
     /// Get hand for active player.
     pub fn get_hand(&self, index: usize) -> String {
         let color = Color::from(index);
-        self.shop.to_sfen(color)
+        self.shop.to_sfen(color, true)
     }
 
     /// Get confirmed players.
@@ -168,7 +168,8 @@ where
         if player_color == piece.color {
             if let Some(confirmed) = self.shop.play(m) {
                 self.game.draws = [false, false];
-                self.game.hands[player] = self.shop.to_sfen(player_color);
+                self.game.hands[player] =
+                    self.shop.to_sfen(player_color, false);
                 if confirmed[player_color as usize] {
                     return Some(LiveGameMove::BuyMove(confirmed));
                 }
@@ -183,28 +184,28 @@ where
         self.game.current_stage = 1;
         let hand = self.load_shop_hand();
         self.placement.generate_plinths();
-        self.game.sfen = self.placement.to_sfen();
+        self.game.sfen = self.placement.generate_sfen();
         self.game.side_to_move = 0;
         set_deploy(id, &hand, &self.game)
     }
 
     /// Transfer hand from shop to deploy part.
     pub fn load_shop_hand(&mut self) -> String {
-        let w = self.shop.to_sfen(Color::White);
-        let b = self.shop.to_sfen(Color::Black);
+        let w = self.shop.to_sfen(Color::White, false);
+        let b = self.shop.to_sfen(Color::Black, false);
         let hand = format!("{}{}", &w, &b);
         self.game.hands = [w, b];
         let sfen = P::empty_placement_board();
-        self.placement.set_hand(hand.as_str());
         self.placement.set_sfen(&sfen).ok();
+        self.placement.set_hand(hand.as_str());
         hand
     }
 
     /// Get hands for both players.
     fn get_hands(&self) -> [String; 2] {
         [
-            self.placement.get_hand(Color::White),
-            self.placement.get_hand(Color::Black),
+            self.placement.get_hand(Color::White, false),
+            self.placement.get_hand(Color::Black, false),
         ]
     }
 
