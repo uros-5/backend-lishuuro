@@ -112,10 +112,12 @@ pub async fn update_entire_game(
 pub async fn get_player_games(
     db: &Collection<ShuuroGame>,
     username: &String,
+    page: u64,
 ) -> Option<Vec<ProfileGame>> {
     let options = FindOptions::builder()
         .projection(doc! {"history": 0, "credits": 0, "hands": 0})
-        .sort(doc! {"$natural": -1})
+        .sort(doc! {"last_clock": -1})
+        .skip(Some(page * 5))
         .limit(Some(5))
         .build();
     let filter = doc! {"players": {"$in": [username]}};

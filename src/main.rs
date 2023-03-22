@@ -35,7 +35,7 @@ async fn main() {
         .route("/vue_user", get(vue_user))
         .route("/ws/", get(websocket_handler))
         .route("/news/:id", get(article))
-        .route("/games/:username", get(get_games))
+        .route("/games/:username/:page", get(get_games))
         .with_state(state)
         .layer(cors_layer);
     let addr = SocketAddr::from(([127, 0, 0, 1], 8080));

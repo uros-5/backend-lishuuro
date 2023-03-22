@@ -71,11 +71,11 @@ pub async fn vue_user(user: UserSession) -> (HeaderMap, Json<VueUser>) {
 
 /// Get last 5 games for selected player.
 pub async fn get_games(
-    Path(username): Path<String>,
+    Path((username, page)): Path<(String, u64)>,
     State(state): State<AppState>,
 ) -> Json<Value> {
     if let Some(games) =
-        get_player_games(&state.db.mongo.games, &username).await
+        get_player_games(&state.db.mongo.games, &username, page).await
     {
         return Json(serde_json::json!({"exist": true, "games": games}));
     }
