@@ -182,6 +182,7 @@ where
 
     pub fn set_deploy(&mut self, id: &str) -> Value {
         self.game.current_stage = 1;
+        self.game.tc.update_stage(1);
         let hand = self.load_shop_hand();
         self.placement.generate_plinths();
         self.game.sfen = self.placement.generate_sfen();
@@ -583,6 +584,7 @@ where
                 LiveGame::new(i.1.clone(), true);
             let id = String::from(i.0);
             v.push(id.clone());
+            game.game.tc.update_stage(i.1.current_stage);
             if i.1.current_stage == 0 {
                 let hands = format!("{}{}", &i.1.hands[0], &i.1.hands[1]);
                 game.shop.set_hand(hands.as_str());
