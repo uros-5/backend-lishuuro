@@ -95,7 +95,7 @@ where
                 placement.set_sfen(sfen).expect("something gone wrong");
                 {
                     if !unfinished {
-                        fight.generate_plinths();
+                        placement.generate_plinths();
                     }
                 }
                 game.sfen = placement.generate_sfen();
