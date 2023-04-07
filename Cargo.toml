@@ -28,7 +28,7 @@ axum-macros = "0.2.2"
 hyper = "0.14"
 json_value_merge = "1.1.2"
 chrono = "0.4.19"
-shuuro = {git = "https://github.com/uros-5/shuuro", branch = "master", features = ["shuuro12", "shuuro8"]}
+shuuro = {git = "https://github.com/uros-5/shuuro", branch = "standard-protocol", features = ["shuuro12", "shuuro8"]}
 ctrlc = "3.2.3"
 dotenv = "0.15.0"
 
