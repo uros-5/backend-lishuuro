@@ -9,10 +9,12 @@ use tower_http::cors::CorsLayer;
 
 mod database;
 mod lichess;
+mod nuxt;
 mod routes;
 mod websockets;
 
 use lichess::{curr_url, MyKey};
+use nuxt::nuxt;
 use routes::{article, callback, get_games, login, vue_user};
 
 use crate::{
@@ -36,6 +38,7 @@ async fn main() {
         .route("/ws/", get(websocket_handler))
         .route("/news/:id", get(article))
         .route("/games/:username/:page", get(get_games))
+        .nest("/nuxt", nuxt())
         .with_state(state)
         .layer(cors_layer);
     let addr = SocketAddr::from(([127, 0, 0, 1], 8080));
