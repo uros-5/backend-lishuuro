@@ -19,7 +19,7 @@ pub async fn shuuro(
     let game = get_game_db(&state.db.mongo.games, &id).await;
     if let Some(game) = game {
         Json(
-            serde_json::json!({"exist": true, "players": game.players, "result": game.result}),
+            serde_json::json!({"exist": true, "players": game.players, "result": game.result, "status": game.status}),
         )
     } else {
         Json(serde_json::json!({"exist": false}))
