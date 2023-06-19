@@ -87,10 +87,8 @@ where
                     }
                 }
                 let sfen = fight.generate_sfen();
-                let part = String::from(&sfen);
-                let part = part.split(' ').next().unwrap();
+                game.history.2.push(String::from(&sfen));
                 game.sfen = sfen;
-                game.history.1.push(format!(" _{}_ _b_1", part));
             } else if stage == 1 {
                 placement.set_sfen(sfen).expect("something gone wrong");
                 {
@@ -99,6 +97,7 @@ where
                     }
                 }
                 game.sfen = placement.generate_sfen();
+                game.history.1.push(String::from(&game.sfen));
             }
         }
 
@@ -187,6 +186,7 @@ where
         self.placement.generate_plinths();
         self.game.sfen = self.placement.generate_sfen();
         self.game.side_to_move = 0;
+        self.game.history.1.push(String::from(&self.game.sfen));
         set_deploy(id, &hand, &self.game)
     }
 
@@ -301,6 +301,7 @@ where
         if let Ok(_o) = outcome {
             self.update_status();
         }
+        self.game.history.2.push(String::from(&sfen));
         self.fight.in_check(self.fight.side_to_move().flip())
     }
 

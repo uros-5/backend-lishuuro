@@ -50,7 +50,7 @@ pub fn pause_confirmed(confirmed: &[bool; 2]) -> Value {
 
 pub fn set_deploy(id: &str, hand: &str, game: &ShuuroGame) -> Value {
     serde_json::json!({"t": "redirect_deploy", "data": {
-        "path": format!("/shuuro/1/{id}"),
+        "path": format!("/shuuro/{id}-1"),
         "hand": hand,
         "last_clock": Utc::now(),
         "side_to_move": "w",
